@@ -1,3 +1,10 @@
+/**
+ * TASK: Basic SIMD Operations
+ * TODO:
+ *  - increase array size and process by step of 4
+ *  - performance measure
+ **/
+
 #include <emmintrin.h>  // SSE2
 #include <cpuid.h>
 #include <iostream>

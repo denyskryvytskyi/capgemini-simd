@@ -1,16 +1,21 @@
-SYS_READ equ 0
+; TASK: Basic SIMD Operations
+; TODO:
+;  - increase array size and process by step of 4
+;  - performance measure
+; 
+
 SYS_WRITE equ 1
 SYS_EXIT equ 60
-STDIN equ 0
 STDOUT equ 1
 
-ARRAY_SIZE equ 4
-INT_SIZE equ 4   ; size in bytes
+ARRAY_LENGTH equ 4
+INT_SIZE equ 4          ; size in bytes
+ITOA_BUFFER_SIZE equ 10 ; size in bytes
 
 section .data
-    arr_A dd 25, 41, 6, 80      ; Array A
-    arr_B dd 11, 2, 3, 50       ; Array B
-    result dq 0, 0, 0, 0        ; Result array initialized to 0
+    arr_A dd 25, 41, 6, 80      ; array A
+    arr_B dd 11, 2, 3, 50       ; array B
+    result dq 0, 0, 0, 0        ; result array initialized to 0
 
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
@@ -28,11 +33,11 @@ section .data
     msg_simd_res db "Result of A + B (SIMD): ", 0
     msg_simd_res_len equ $ - msg_simd_res
 
-    newline_ascii db 0xa                                ; newline character
-    space_ascii db 0x20                                 ; space character
+    newline_ascii db 0xa    ; newline character
+    space_ascii db 0x20     ; space character
 
 section .bss
-    itoa_result_buffer resb 20  ; buffer to store the number digits in string
+    itoa_result_buffer resb 10  ; buffer to store the number digits in string
 
 section .text
     global _start
@@ -62,7 +67,7 @@ _start:
 
 ; =================== addition functions ===================
 add_loop:
-    mov ecx, ARRAY_SIZE
+    mov ecx, ARRAY_LENGTH
     mov esi, arr_A      ; pointer to array A
     mov edi, arr_B      ; pointer to array B
     mov ebx, result     ; pointer to result array
@@ -87,22 +92,22 @@ add_simd:
     ; check for SSE2 support
     mov eax, 1                   ; CPUID function 1
     cpuid
-    test edx, 1 << 26            ; Check if SSE2 (bit 26 of edx) is set
+    test edx, 1 << 26            ; check if SSE2 (bit 26 of edx) is set
     jz .no_sse2
 
     ; check for AVX support
-    test ecx, 1 << 28            ; Check if AVX (bit 28 of ecx) is set
+    test ecx, 1 << 28            ; check if AVX (bit 28 of ecx) is set
     jz .no_avx
 
     ; load arr_A and arrB into xmm registers
-    movaps xmm0, [arr_A]          ; Load array A into xmm0
-    movaps xmm1, [arr_B]          ; Load array B into xmm1
+    movaps xmm0, [arr_A]          ; load array A into xmm0
+    movaps xmm1, [arr_B]          ; load array B into xmm1
 
     ; perform SIMD addition (A + B)
-    paddd xmm0, xmm1             ; Packed addition of 32-bit integers
+    paddd xmm0, xmm1             ; packed addition of 32-bit integers
 
     ; store the result in memory
-    movaps [result], xmm0        ; Store the result of the addition
+    movaps [result], xmm0        ; store the result of the addition
 
     ; print result
     mov rsi, msg_simd_res
@@ -143,7 +148,7 @@ itoa:
 
     mov rdi, itoa_result_buffer ; point edi to the end of the buffer
 
-    add rdi, 19                 ; fill it from right to left
+    add rdi, 9                  ; fill it from right to left
     mov rcx, 10                 ; divisor for extracting digits
 
     .convert_loop:
@@ -172,7 +177,7 @@ print_int:
     push rcx
 
     mov rdx, itoa_result_buffer
-    add rdx, 20
+    add rdx, 10
     sub rdx, rdi                 ; rdx now holds the string length
 
     mov rsi, rdi
@@ -184,7 +189,7 @@ print_int:
 ret
 
 print_array:
-    mov ecx, ARRAY_SIZE         ; size of array for loop counter
+    mov ecx, ARRAY_LENGTH         ; size of array for loop counter
     .loop_array:
         mov eax, [ebx]        ; next number
         call itoa
