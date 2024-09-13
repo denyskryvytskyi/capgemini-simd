@@ -49,6 +49,7 @@ section .bss
     
 section .text
     extern posix_memalign
+    extern free
     global main
 
 main:
@@ -94,6 +95,15 @@ main:
 
     call add_loop
     call add_simd
+
+    ; free memory
+    mov rdi, [arrA_ptr]
+    call free
+    mov rdi, [arrB_ptr]
+    call free
+    mov rdi, [result_arr_ptr]
+    call free
+
     jmp .exit
 
     .alloc_failed:
