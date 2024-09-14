@@ -1,32 +1,47 @@
 /**
  * TASK: Basic SIMD Operations
- * TODO:
- *  - increase array size and process by step of 4
- *  - performance measure
+ * NOTE: Because in this task we use static arrays, result array and reminder calculation involves more code and memory copy. In the second task with dynamic arrays this processing is avoided.
+ * RESULTS: (for static array size equals 10003)
+ *  1. if we compile without optimizations flags:
+ *      - Loop-based execution time: ~30-40 microseconds
+ *      - SIMD-based: ~7-10 microseconds
+ *  2. with optimization flags (-O3 -msse2):
+ *      - Loop-based execution time: <1 microsecond (faster)
+ *      - SIMD-based: ~2 microsecond
  **/
 
 #include <emmintrin.h>  // SSE2
 #include <cpuid.h>
 #include <iostream>
+#include <chrono>
 
-bool isSupportedSSE2();
-bool isSupportedAVX();
-void printArray(int* arr);
-void addLooped(int* arrA, int* arrB);
-void addSIMD(int* arrA, int* arrB);
+constexpr int32_t ARRAY_SIZE = 10003;
+constexpr bool PRINT_ARRAYS = false;
+constexpr int32_t INT_AMOUNT_PER_SIMD_REG = 4;
 
-constexpr int ARRAY_SIZE = 4;
+void printArray(int32_t* arr);
+void addLooped(int32_t* arrA, int32_t* arrB);
+void addSIMD(int32_t* arrA, int32_t* arrB);
 
 int main()
 {
-    alignas(16) int32_t arrA[ARRAY_SIZE] = { 25, 41, -6, 80 };
-    alignas(16) int32_t arrB[ARRAY_SIZE] = { 11, 2, 3, -50 };
+    alignas(16) int32_t arrA[ARRAY_SIZE];
+    alignas(16) int32_t arrB[ARRAY_SIZE];
 
-    std::cout << "Array A: ";
-    printArray(arrA);
+    for (int i = 0; i < ARRAY_SIZE; ++i)
+    {
+        arrA[i] = i;
+        arrB[i] = i + 1;
+    }
 
-    std::cout << "Array B: ";
-    printArray(arrB);
+    if (PRINT_ARRAYS)
+    {
+        std::cout << "Array A: ";
+        printArray(arrA);
+
+        std::cout << "Array B: ";
+        printArray(arrB);
+    }
 
     addLooped(arrA, arrB);
     addSIMD(arrA, arrB);
@@ -36,60 +51,92 @@ int main()
 
 bool isSupportedSSE2()
 {
-    unsigned int eax, ebx, ecx, edx;
-    __get_cpuid(1, &eax, &ebx, &ecx, &edx);
-    return (edx & (1 << 26)) != 0; // Check SSE2 bit
+    unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
+    __get_cpuid(1, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
+    return (cpuInfo[3] & (1 << 26)) != 0; // Check SSE2 bit
 }
 
 bool isSupportedAVX()
 {
-    unsigned int eax, ebx, ecx, edx;
-    __get_cpuid(1, &eax, &ebx, &ecx, &edx);
-    return (ecx & (1 << 28)) != 0; // Check AVX bit
+    unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
+    __get_cpuid(1, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
+    return (cpuInfo[2] & (1 << 28)) != 0; // Check AVX bit
 }
 
-void printArray(int* arr)
+void printArray(int32_t* arr)
 {
-    for (size_t i = 0; i < ARRAY_SIZE; ++i) {
+    for (int i = 0; i < ARRAY_SIZE; ++i)
+    {
         std::cout << arr[i] << " ";
     }
 
     std::cout << std::endl;
 }
 
-void addLooped(int* arrA, int* arrB)
+void addLooped(int32_t* arrA, int32_t* arrB)
 {
     std::cout << "===== Looped-based addition =====\n";
 
-    int R[4];
-
-    for (size_t i = 0; i < ARRAY_SIZE; ++i) {
+    int R[ARRAY_SIZE];
+    const auto startTimePoint = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < ARRAY_SIZE; ++i)
+    {
         R[i] = arrA[i] + arrB[i];
     }
+    const auto endTimePoint = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Result of A + B: ";
-    printArray(R);
+    if (PRINT_ARRAYS)
+    {
+        std::cout << "Result of A + B: ";
+        printArray(R);
+    }
+
+    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTimePoint - startTimePoint);
+    std::cout << "Execution time: " << duration.count() << " microseconds.\n";
 }
 
-void addSIMD(int* arrA, int* arrB)
+void addSIMD(int32_t* pArrA, int32_t* pArrB)
 {
     std::cout << "===== SIMD-based addition =====\n";
 
-    if (!isSupportedSSE2()) {
+    if (!isSupportedSSE2())
+    {
         std::cerr << "SSE2 is not supported on this CPU." << std::endl;
     }
-    if (!isSupportedAVX()) {
+    if (!isSupportedAVX())
+    {
         std::cerr << "AVX is not supported on this CPU." << std::endl;
     }
 
-    __m128i xmmA = _mm_load_si128(reinterpret_cast<const __m128i*>(arrA));
-    __m128i xmmB = _mm_load_si128(reinterpret_cast<const __m128i*>(arrB));
+    const __m128i* pArrASIMD = reinterpret_cast<const __m128i*>(pArrA);
+    const __m128i* pArrBSIMD = reinterpret_cast<const __m128i*>(pArrB);
 
-    __m128i xmmRes = _mm_add_epi32(xmmA, xmmB);
+    int result[ARRAY_SIZE]; // result array
+    __m128i* pResSIMD = reinterpret_cast<__m128i*>(result); // pointer to result array with proper type for simd
 
-    alignas(16) int R[4];
-    _mm_store_si128(reinterpret_cast<__m128i*>(R), xmmRes); // Store result of xmm3 into R1
+    const int32_t resultArraySize = ARRAY_SIZE / INT_AMOUNT_PER_SIMD_REG;
 
-    std::cout << "Result of A + B: ";
-    printArray(R);
+    const auto startTimePoint = std::chrono::high_resolution_clock::now();
+
+    int i = 0;
+    for (; i < resultArraySize; ++i)
+    {
+        pResSIMD[i] = _mm_add_epi32(pArrASIMD[i], pArrBSIMD[i]);
+    }
+
+    // remainder
+    for (int j = i * INT_AMOUNT_PER_SIMD_REG; j < ARRAY_SIZE; ++j)
+    {
+        result[j] = pArrA[j] + pArrB[j];
+    }
+    const auto endTimePoint = std::chrono::high_resolution_clock::now();
+
+    if (PRINT_ARRAYS)
+    {
+        std::cout << "Result of A + B: ";
+        printArray(result);
+    }
+
+    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTimePoint - startTimePoint);
+    std::cout << "Execution time: " << duration.count() << " microseconds.\n";
 }
