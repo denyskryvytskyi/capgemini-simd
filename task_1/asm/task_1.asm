@@ -1,22 +1,19 @@
 ; TASK: Basic SIMD Operations
-; TODO:
-;  - increase array size and process by step of 4
+; NOTE: For this task I use unaligned arrays and movups instruction to load unaligned data to simd register.
+;   In the second task I have dynamic arrays allocated in aligned memory.
+;  TODO:
 ;  - performance measure
-; 
+;
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-ARRAY_LENGTH equ 4
+ARRAY_LENGTH equ 18
 INT_SIZE equ 4          ; size in bytes
 ITOA_BUFFER_SIZE equ 10 ; size in bytes
 
 section .data
-    arr_A dd 25, 41, 6, 80      ; array A
-    arr_B dd 11, 2, 3, 50       ; array B
-    result dq 0, 0, 0, 0        ; result array initialized to 0
-
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
     msg_AVX db "AVX is not supported on this CPU.", 0
@@ -37,12 +34,22 @@ section .data
     space_ascii db 0x20     ; space character
 
 section .bss
+    arr_A resd ARRAY_LENGTH     ; array A
+    arr_B resd ARRAY_LENGTH     ; array B
+    result resd ARRAY_LENGTH    ; result array
     itoa_result_buffer resb 10  ; buffer to store the number digits in string
 
 section .text
     global _start
 
 _start:
+    ; init arrays
+    mov edi, arr_A
+    call init_data
+
+    mov edi, arr_B
+    call init_data
+
     ; print array A
     mov rsi, msg_A
     mov rdx, msg_A_len
@@ -57,7 +64,7 @@ _start:
     mov rbx, arr_B
     call print_array
 
-    call add_loop
+    ;call add_loop
     call add_simd
 
     mov eax, SYS_EXIT                   ; sys_exit system call
@@ -99,23 +106,53 @@ add_simd:
     test ecx, 1 << 28            ; check if AVX (bit 28 of ecx) is set
     jz .no_avx
 
-    ; load arr_A and arrB into xmm registers
-    movaps xmm0, [arr_A]          ; load array A into xmm0
-    movaps xmm1, [arr_B]          ; load array B into xmm1
+    ; calculate sum
+    mov ecx, ARRAY_LENGTH   ; array size
+    shr ecx, 2              ; divide by 4 to find amount of 128-register values
+    lea esi, [arr_A]          ; pointer to array A
+    lea edi, [arr_B]          ; pointer to array B
+    mov ebx, result         ; pointer to result array
+    mov ebp, 0              ; index of loop
+    .loop_process_pack:
+        cmp ebp, ecx
+        jge .check_remainder
+        ; load arr_A and arrB into xmm registers
+        movups xmm0, [esi]          ; load array A into xmm0
+        movups xmm1, [edi]          ; load array B into xmm1
 
-    ; perform SIMD addition (A + B)
-    paddd xmm0, xmm1             ; packed addition of 32-bit integers
+        ; perform SIMD addition (A + B)
+        paddd xmm0, xmm1            ; packed addition of 32-bit integers
 
-    ; store the result in memory
-    movaps [result], xmm0        ; store the result of the addition
+        ; store the result in memory
+        movups [ebx], xmm0          ; store the result of the addition
+        inc ebp
+        add esi, 16
+        add edi, 16
+        add ebx, 16
+        jmp .loop_process_pack
 
-    ; print result
-    mov rsi, msg_simd_res
-    mov rdx, msg_simd_res_len
-    call print_string
-    mov rbx, result
-    call print_array
-    jmp .exit
+    .check_remainder:
+        shl ebp, 2                  ; multiple by 4 to receive final processed element index
+        .loop_process_remainder:
+            cmp ebp, ARRAY_LENGTH   ; check index
+            jge .done
+            mov eax, [esi]          ; element from the array A
+            add eax, [edi]          ; add element from the array B
+            mov [ebx], eax          ; move to result array
+            inc ebp
+            add esi, INT_SIZE
+            add edi, INT_SIZE
+            add ebx, INT_SIZE
+            jmp .loop_process_remainder
+
+    .done:
+        ; print result
+        mov rsi, msg_simd_res
+        mov rdx, msg_simd_res_len
+        call print_string
+        mov rbx, result
+        call print_array
+        jmp .exit
 
     .no_sse2:
         ; if no SSE2 support, print error message
@@ -134,6 +171,18 @@ add_simd:
 ret
 
 ; =================== helpers ===================
+init_data:
+    xor esi, esi ; index
+
+    .init:
+        cmp esi, ARRAY_LENGTH
+        jge .done_filling                       ; if index >= ARRAY_LENGTH, stop filling
+        mov [edi + esi * INT_SIZE], esi         ; store index as the value in the array
+        inc esi                                 ; move to the next index
+        jmp .init
+
+    .done_filling:
+ret
 
 print_string:
     push rcx

@@ -1,6 +1,5 @@
 ; TASK: Data Alignment and Memory Access
 ; TODO:
-;  - increase array size and process by step of 4
 ;  - performance measure
 ; 
 
@@ -8,11 +7,11 @@ SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-ARRAY_LENGTH equ 4      ; length of the arrays
-INT_SIZE equ 4          ; size in bytes
-ARRAY_SIZE equ 16       ; 4 integers * 4-byte
+ARRAY_LENGTH equ 18                         ; length of the arrays
+INT_SIZE equ 4                              ; size in bytes
+ARRAY_SIZE equ ARRAY_LENGTH * INT_SIZE      ; 4 integers * 4-byte
 ALIGNMENT equ 16
-ITOA_BUFFER_SIZE equ 10 ; size in bytes
+ITOA_BUFFER_SIZE equ 10                     ; size in bytes
 
 section .data
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
@@ -151,26 +150,53 @@ add_simd:
     test ecx, 1 << 28            ; check if AVX (bit 28 of ecx) is set
     jz .no_avx
 
-    ; load arr_A and arrB into xmm registers
-    mov rax, [arrA_ptr]
-    mov rbx, [arrB_ptr]
-    movaps xmm0, [rax]          ; load array A into xmm0
-    movaps xmm1, [rbx]          ; load array B into xmm1
+    ; calculate sum
+    mov ecx, ARRAY_LENGTH   ; array size
+    shr ecx, 2              ; divide by 4 to find amount of 128-register values
+    mov esi, [arrA_ptr]     ; pointer to array A
+    mov edi, [arrB_ptr]     ; pointer to array B
+    mov ebx, [result_arr_ptr]         ; pointer to result array
+    mov ebp, 0              ; index of loop
+    .loop_process_pack:
+        cmp ebp, ecx
+        jge .check_remainder
+        ; load arr_A and arrB into xmm registers
+        movups xmm0, [esi]          ; load array A into xmm0
+        movups xmm1, [edi]          ; load array B into xmm1
 
-    ; perform SIMD addition (A + B)
-    paddd xmm0, xmm1             ; packed addition of 32-bit integers
+        ; perform SIMD addition (A + B)
+        paddd xmm0, xmm1            ; packed addition of 32-bit integers
 
-    ; store the result in memory
-    mov rax, [result_arr_ptr]
-    movaps [rax], xmm0        ; store the result of the addition
+        ; store the result in memory
+        movups [ebx], xmm0          ; store the result of the addition
+        inc ebp
+        add esi, 16
+        add edi, 16
+        add ebx, 16
+        jmp .loop_process_pack
 
-    ; print result
-    mov rsi, msg_simd_res
-    mov rdx, msg_simd_res_len
-    call print_string
-    mov rbx, [result_arr_ptr]
-    call print_array
-    jmp .exit
+    .check_remainder:
+        shl ebp, 2                  ; multiple by 4 to receive final processed element index
+        .loop_process_remainder:
+            cmp ebp, ARRAY_LENGTH   ; check index
+            jge .done
+            mov eax, [esi]          ; element from the array A
+            add eax, [edi]          ; add element from the array B
+            mov [ebx], eax          ; move to result array
+            inc ebp
+            add esi, INT_SIZE
+            add edi, INT_SIZE
+            add ebx, INT_SIZE
+            jmp .loop_process_remainder
+
+    .done:
+        ; print result
+        mov rsi, msg_simd_res
+        mov rdx, msg_simd_res_len
+        call print_string
+        mov rbx, [result_arr_ptr]
+        call print_array
+        jmp .exit
 
     .no_sse2:
         ; if no SSE2 support, print error message
