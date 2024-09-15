@@ -7,10 +7,10 @@ SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-ARRAY_LENGTH equ 100000000                      ; length of the arrays
+ARRAY_LENGTH equ 100000000                  ; length of the arrays
 INT_SIZE equ 4                              ; size in bytes
 ARRAY_SIZE equ ARRAY_LENGTH * INT_SIZE      ; 4 integers * 4-byte
-ALIGNMENT equ 16
+ALIGNMENT equ 32
 ITOA_BUFFER_SIZE equ 10                     ; size in bytes
 
 PRINT_ARRAYS equ 0                          ; flag to print arrays (1 - print, 0 - don't print)
@@ -185,7 +185,7 @@ add_simd:
 
     ; calculate sum
     mov rcx, ARRAY_LENGTH       ; array size
-    shr rcx, 2                  ; divide by 4 to find amount of 128-register values
+    shr rcx, 3                  ; divide by 8 to find amount of 256-register values
     mov rsi, [arrA_ptr]         ; pointer to array A
     mov rdi, [arrB_ptr]         ; pointer to array B
     mov rbx, [result_arr_ptr]   ; pointer to result array
@@ -194,25 +194,25 @@ add_simd:
     call timer_start            ; get the start time
 
     .loop_process_pack:
-        cmp ebp, ecx
+        cmp rbp, rcx
         jge .check_remainder
         ; load arr_A and arrB into xmm registers
-        movups xmm0, [rsi]          ; load array A into xmm0
-        movups xmm1, [rdi]          ; load array B into xmm1
+        vmovaps ymm0, [rsi]          ; load array A into xmm0
+        vmovaps ymm1, [rdi]          ; load array B into xmm1
 
         ; perform SIMD addition (A + B)
-        paddd xmm0, xmm1            ; packed addition of 32-bit integers
+        vpaddd ymm0, ymm1            ; packed addition of 32-bit integers
 
         ; store the result in memory
-        movups [rbx], xmm0          ; store the result of the addition
-        inc ebp
-        add rsi, 16
-        add rdi, 16
-        add rbx, 16
+        vmovaps [rbx], ymm0          ; store the result of the addition
+        inc rbp
+        add rsi, ALIGNMENT
+        add rdi, ALIGNMENT
+        add rbx, ALIGNMENT
         jmp .loop_process_pack
 
     .check_remainder:
-        shl ebp, 2                  ; multiple by 4 to receive final processed element index
+        shl ebp, 3                  ; multiple by 4 to receive final processed element index
         .loop_process_remainder:
             cmp ebp, ARRAY_LENGTH   ; check index
             jge .done
