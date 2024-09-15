@@ -1,6 +1,5 @@
 /**
  * TASK: Basic SIMD Operations
- * NOTE: Because in this task we use static arrays, result array and reminder calculation involves more code and memory copy. In the second task with dynamic arrays this processing is avoided.
  * RESULTS: (for static array size equals 10003)
  *  1. if we compile without optimizations flags:
  *      - Loop-based execution time: ~30-40 microseconds

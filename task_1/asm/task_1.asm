@@ -1,17 +1,20 @@
 ; TASK: Basic SIMD Operations
 ; NOTE: For this task I use unaligned arrays and movups instruction to load unaligned data to simd register.
-;   In the second task I have dynamic arrays allocated in aligned memory.
-;  TODO:
-;  - performance measure
-;
+;       In the second task I have dynamic arrays allocated in aligned memory.
+; RESULTS (for arrays with size 100'000'000)):
+;  - Loop-based execution time: ~200-300 ms
+;  - SIMD-based execution time: ~70-80 ms
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-ARRAY_LENGTH equ 18
+ARRAY_LENGTH equ 19
 INT_SIZE equ 4          ; size in bytes
 ITOA_BUFFER_SIZE equ 10 ; size in bytes
+PRINT_ARRAYS equ 1      ; flag to print arrays (1 - print, 0 - don't print)
+CPU_FREQ equ 2808000000 ; CPU frequency for execution time calculation
+MS_IN_SEC equ 1000
 
 section .data
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
@@ -24,14 +27,24 @@ section .data
     msg_B db "Array B: ", 0
     msg_B_len equ $ - msg_B
 
-    msg_loop_res db "Result of A + B (Loop): ", 0
+    msg_loop_res db "====== Loop-based results ======", 0
     msg_loop_res_len equ $ - msg_loop_res
 
-    msg_simd_res db "Result of A + B (SIMD): ", 0
+    msg_simd_res db "====== SIMD-based results ======", 0
     msg_simd_res_len equ $ - msg_simd_res
+
+    msg_arr_sum_res db "A + B: ", 0
+    msg_arr_sum_res_len equ $ - msg_arr_sum_res
+
+    msg_timer db "Exectuion time (ms): ", 0
+    msg_timer_len equ $ - msg_timer
 
     newline_ascii db 0xa    ; newline character
     space_ascii db 0x20     ; space character
+
+    ; timer vars
+    start_time dq 0
+    end_time dq 0
 
 section .bss
     arr_A resd ARRAY_LENGTH     ; array A
@@ -50,6 +63,9 @@ _start:
     mov edi, arr_B
     call init_data
 
+    mov ax, PRINT_ARRAYS
+    test ax, ax
+    jz .calculation
     ; print array A
     mov rsi, msg_A
     mov rdx, msg_A_len
@@ -64,9 +80,11 @@ _start:
     mov rbx, arr_B
     call print_array
 
-    ;call add_loop
-    call add_simd
+    .calculation:
+        call add_loop
+        call add_simd
 
+    ; exit
     mov eax, SYS_EXIT                   ; sys_exit system call
     xor edi, edi                        ; exit status 0
     
@@ -78,6 +96,9 @@ add_loop:
     mov esi, arr_A      ; pointer to array A
     mov edi, arr_B      ; pointer to array B
     mov ebx, result     ; pointer to result array
+
+    call timer_start    ; get the start time
+
     .array_loop:
         mov eax, [esi]
         add eax, [edi]
@@ -87,12 +108,25 @@ add_loop:
         add ebx, INT_SIZE
     loop .array_loop
 
-    ; print result
+    call timer_end      ; get the end time
+
     mov rsi, msg_loop_res
     mov rdx, msg_loop_res_len
+    call print_string   ; print header
+    call print_newline
+    call timer_result   ; print timer results
+
+    mov ax, PRINT_ARRAYS
+    test ax, ax
+    jz .exit
+    ; print result
+    mov rsi, msg_arr_sum_res
+    mov rdx, msg_arr_sum_res_len
     call print_string
     mov rbx, result
     call print_array
+
+    .exit:
 ret
 
 add_simd:
@@ -109,10 +143,13 @@ add_simd:
     ; calculate sum
     mov ecx, ARRAY_LENGTH   ; array size
     shr ecx, 2              ; divide by 4 to find amount of 128-register values
-    lea esi, [arr_A]          ; pointer to array A
-    lea edi, [arr_B]          ; pointer to array B
+    lea esi, [arr_A]        ; pointer to array A
+    lea edi, [arr_B]        ; pointer to array B
     mov ebx, result         ; pointer to result array
     mov ebp, 0              ; index of loop
+
+    call timer_start        ; get the start time
+
     .loop_process_pack:
         cmp ebp, ecx
         jge .check_remainder
@@ -146,12 +183,23 @@ add_simd:
             jmp .loop_process_remainder
 
     .done:
-        ; print result
+        call timer_end      ; get the end time
         mov rsi, msg_simd_res
         mov rdx, msg_simd_res_len
+        call print_string   ; print header
+        call print_newline
+        call timer_result   ; print timer results
+
+        mov ax, PRINT_ARRAYS
+        test ax, ax
+        jz .exit
+        ; print result array
+        mov rsi, msg_arr_sum_res
+        mov rdx, msg_arr_sum_res_len
         call print_string
         mov rbx, result
         call print_array
+
         jmp .exit
 
     .no_sse2:
@@ -186,9 +234,13 @@ ret
 
 print_string:
     push rcx
+    push rax
+
     mov rax, SYS_WRITE
     mov rdi, STDOUT
     syscall
+    
+    pop rax
     pop rcx
 ret
 
@@ -252,5 +304,39 @@ print_array:
         add ebx, INT_SIZE  ; move pointer to the next element
         loop .loop_array
 
+    call print_newline
+ret
+
+timer_start:
+    rdtsc                       ; read time-stamp counter into EDX:EAX
+    shl rdx, 32                 ; shift RDX left by 32 bits
+    or rax, rdx                 ; combine into a 64-bit value (RAX)
+    mov [start_time], rax       ; store start time
+ret
+
+timer_end:
+    rdtsc                       ; read time-stamp counter into EDX:EAX
+    shl rdx, 32                 ; shift RDX left by 32 bits
+    or rax, rdx                 ; combine into a 64-bit value (RAX)
+    mov [end_time], rax         ; store end time
+ret
+
+timer_result:
+    ; calculate elapsed CPU cycles
+    mov rax, [end_time]         ; load end time
+    sub rax, [start_time]       ; subtract start time to get elapsed cycles
+
+    ; convert cycles to milliseconds: elapsed * 1000 / CPU frequency
+    mov rbx, CPU_FREQ         ; load CPU frequency
+    mov rcx, MS_IN_SEC        ; conversion factor (1000 ms)
+    mul rcx                   ; rax = elapsed * 1000
+    div rbx                   ; rax = (elapsed * 1000) / CPU frequency
+
+    ; print result
+    mov esi, msg_timer
+    mov edx, msg_timer_len
+    call print_string
+    call itoa
+    call print_int
     call print_newline
 ret
