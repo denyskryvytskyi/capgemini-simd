@@ -27,14 +27,12 @@ int main()
     alignas(16) int32_t arrA[ARRAY_SIZE];
     alignas(16) int32_t arrB[ARRAY_SIZE];
 
-    for (int i = 0; i < ARRAY_SIZE; ++i)
-    {
+    for (int i = 0; i < ARRAY_SIZE; ++i) {
         arrA[i] = i;
         arrB[i] = i + 1;
     }
 
-    if (PRINT_ARRAYS)
-    {
+    if (PRINT_ARRAYS) {
         std::cout << "Array A: ";
         printArray(arrA);
 
@@ -64,8 +62,7 @@ bool isSupportedAVX()
 
 void printArray(int32_t* arr)
 {
-    for (int i = 0; i < ARRAY_SIZE; ++i)
-    {
+    for (int i = 0; i < ARRAY_SIZE; ++i) {
         std::cout << arr[i] << " ";
     }
 
@@ -78,14 +75,12 @@ void addLooped(int32_t* arrA, int32_t* arrB)
 
     int R[ARRAY_SIZE];
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < ARRAY_SIZE; ++i)
-    {
+    for (int i = 0; i < ARRAY_SIZE; ++i) {
         R[i] = arrA[i] + arrB[i];
     }
     const auto endTimePoint = std::chrono::high_resolution_clock::now();
 
-    if (PRINT_ARRAYS)
-    {
+    if (PRINT_ARRAYS) {
         std::cout << "Result of A + B: ";
         printArray(R);
     }
@@ -98,12 +93,10 @@ void addSIMD(int32_t* pArrA, int32_t* pArrB)
 {
     std::cout << "===== SIMD-based addition =====\n";
 
-    if (!isSupportedSSE2())
-    {
+    if (!isSupportedSSE2()) {
         std::cerr << "SSE2 is not supported on this CPU." << std::endl;
     }
-    if (!isSupportedAVX())
-    {
+    if (!isSupportedAVX()) {
         std::cerr << "AVX is not supported on this CPU." << std::endl;
     }
 
@@ -118,20 +111,17 @@ void addSIMD(int32_t* pArrA, int32_t* pArrB)
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
 
     int i = 0;
-    for (; i < resultArraySize; ++i)
-    {
+    for (; i < resultArraySize; ++i) {
         pResSIMD[i] = _mm_add_epi32(pArrASIMD[i], pArrBSIMD[i]);
     }
 
     // remainder
-    for (int j = i * INT_AMOUNT_PER_SIMD_REG; j < ARRAY_SIZE; ++j)
-    {
+    for (int j = i * INT_AMOUNT_PER_SIMD_REG; j < ARRAY_SIZE; ++j) {
         result[j] = pArrA[j] + pArrB[j];
     }
     const auto endTimePoint = std::chrono::high_resolution_clock::now();
 
-    if (PRINT_ARRAYS)
-    {
+    if (PRINT_ARRAYS) {
         std::cout << "Result of A + B: ";
         printArray(result);
     }

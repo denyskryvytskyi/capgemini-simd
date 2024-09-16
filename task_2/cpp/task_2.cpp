@@ -8,8 +8,6 @@
  *  - With optimization flags -O3 -mavx2:
  *      - Loop-based execution time: 80-300 ms
  *      - SIMD-based execution time: ~70 ms (overall faster)
- * TODO:
- *  - use smaller SIMD registers for remainder calculation
  **/ 
 
 #include <immintrin.h>  // AVX
@@ -25,16 +23,16 @@ constexpr bool PRINT_ARRAYS = false;
 
 void printArray(int* arr);
 
-void allocArray(int*& pArr);
-void initData(int* pArrA, int* pArrB);
-void addLooped(int* pArrA, int* pArrB, int* pRes);
-void addSIMD(int* pArrA, int* pArrB, int* pRes);
+void allocArray(int32_t*& pArr);
+void initData(int32_t* pArrA, int32_t* pArrB);
+void add(int32_t* pArrA, int32_t* pArrB, int32_t* pRes);
+void addSIMD(int32_t* pArrA, int32_t* pArrB, int32_t* pRes);
 
 int main()
 {
-    int* pArrA = nullptr;
-    int* pArrB = nullptr;
-    int* pRes = nullptr;
+    int32_t* pArrA = nullptr;
+    int32_t* pArrB = nullptr;
+    int32_t* pRes = nullptr;
 
     allocArray(pArrA);
     allocArray(pArrB);
@@ -50,11 +48,12 @@ int main()
         printArray(pArrB);
     }
 
-    addLooped(pArrA, pArrB, pRes);
+    add(pArrA, pArrB, pRes);
     addSIMD(pArrA, pArrB, pRes);
 
     free(pArrA);
     free(pArrB);
+    free(pRes);
 
     return 0;
 }
@@ -63,14 +62,14 @@ bool isSupportedSSE2()
 {
     unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
     __get_cpuid(1, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
-    return (cpuInfo[3] & (1 << 26)) != 0; // Check SSE2 bit
+    return (cpuInfo[3] & (1 << 26)) != 0; // check SSE2 bit
 }
 
 bool isSupportedAVX()
 {
     unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
     __get_cpuid(1, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
-    return (cpuInfo[2] & (1 << 28)) != 0; // Check AVX bit
+    return (cpuInfo[2] & (1 << 28)) != 0; // check AVX bit
 }
 
 bool isSupportedAVX512()
@@ -78,16 +77,15 @@ bool isSupportedAVX512()
     unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
     __get_cpuid(0, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]); // check if CPUID supports function 7
     
-    if (cpuInfo[0] >= 7) // ensure function 7 is supported
-    {
+    if (cpuInfo[0] >= 7) {
         __get_cpuid(7, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
-        return (cpuInfo[1] & (1 << 16)) != 0; // Check AVX-512 Foundation (bit 16 of EBX)
+        return (cpuInfo[1] & (1 << 16)) != 0; // check AVX-512 bit
     }
     
     return false; // AVX-512 is not supported
 }
 
-void printArray(int* arr)
+void printArray(int32_t* arr)
 {
     for (int i = 0; i < ARRAY_SIZE; ++i) {
         std::cout << arr[i] << " ";
@@ -97,25 +95,24 @@ void printArray(int* arr)
 }
 
 
-void allocArray(int*& pArr)
+void allocArray(int32_t*& pArr)
 {
-    if (posix_memalign(reinterpret_cast<void**>(&pArr), ALIGNMENT, ARRAY_SIZE * sizeof(int)) != 0) {
+    if (posix_memalign(reinterpret_cast<void**>(&pArr), ALIGNMENT, ARRAY_SIZE * sizeof(int32_t)) != 0) {
         std::cerr << "Failed to allocate aligned memory." << std::endl;
     }
 }
 
-void initData(int* pArrA, int* pArrB)
+void initData(int32_t* pArrA, int32_t* pArrB)
 {
-    for (int i = 0; i < ARRAY_SIZE; ++i)
-    {
+    for (int i = 0; i < ARRAY_SIZE; ++i) {
         pArrA[i] = i;
         pArrB[i] = i + 1;
     }
 }
 
-void addLooped(int* pArrA, int* pArrB, int* pRes)
+void add(int32_t* pArrA, int32_t* pArrB, int32_t* pRes)
 {
-    std::cout << "===== Looped-based addition =====\n";
+    std::cout << "===== Loop-based addition =====\n";
 
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ARRAY_SIZE; ++i) {
@@ -129,10 +126,10 @@ void addLooped(int* pArrA, int* pArrB, int* pRes)
     }
 
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - startTimePoint);
-    std::cout << "Calculation time: " << duration.count() << " ms.\n";
+    std::cout << "Execution time: " << duration.count() << " ms.\n";
 }
 
-void addSIMD(int* pArrA, int* pArrB, int* pRes)
+void addSIMD(int32_t* pArrA, int32_t* pArrB, int32_t* pRes)
 {
     std::cout << "===== SIMD-based addition =====\n";
 
@@ -166,7 +163,7 @@ void addSIMD(int* pArrA, int* pArrB, int* pRes)
     }
 
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - startTimePoint);
-    std::cout << "Calculation time: " << duration.count() << " ms.\n";
+    std::cout << "Execution time: " << duration.count() << " ms.\n";
 
     if (PRINT_ARRAYS) {
         std::cout << "Result of A + B: ";

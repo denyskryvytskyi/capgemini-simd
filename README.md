@@ -26,9 +26,10 @@ C++ tasks are implemented for the Linux environment (WSL) and g++ compiler.
 `g++ -o task_<n> task_<n>.cpp`
 #### With optimization flags:
 **SSE**
-`g++ -Wall -o task_2 task_2.cpp -O3 -msse2`
+`g++ -Wall -o task_<n> task_<n>.cpp -O3 -msse2`
+
 **AVX**
-`g++ -Wall -o task_2 task_2.cpp -O3 -mavx2`
+`g++ -Wall -o task_<n> task_<n>.cpp -O3 -mavx2`
 
 ### Run
 `./task_<n>`
