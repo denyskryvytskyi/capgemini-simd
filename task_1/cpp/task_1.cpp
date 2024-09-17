@@ -1,7 +1,7 @@
 /**
  * TASK: Basic SIMD Operations
  * RESULTS: (for static array size equals 10003)
- *  1. if we compile without optimizations flags:
+ *  1. without optimizations flags:
  *      - Loop-based execution time: ~30-40 microseconds
  *      - SIMD-based: ~7-10 microseconds
  *  2. with optimization flags (-O3 -msse2):

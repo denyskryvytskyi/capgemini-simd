@@ -44,8 +44,7 @@ void dotProductSIMD(float* pVecA, float* pVecB);
 
 int main()
 {
-    if (checkSIMDSupport())
-    {
+    if (checkSIMDSupport()) {
         return -1;
     }
 
@@ -98,9 +97,9 @@ bool isSupportedAVX512()
 {
     unsigned int cpuInfo[4] = { 0 }; // eax, ebx, ecx, edx registers
     __get_cpuid(0, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]); // check if CPUID supports function 7
-    
-    if (cpuInfo[0] >= 7) // ensure function 7 is supported
-    {
+
+    // ensure function 7 is supported
+    if (cpuInfo[0] >= 7) {
         __get_cpuid(7, &cpuInfo[0], &cpuInfo[1], &cpuInfo[2], &cpuInfo[3]);
         return (cpuInfo[1] & (1 << 16)) != 0; // Check AVX-512 Foundation (bit 16 of EBX)
     }
@@ -183,8 +182,7 @@ void addSIMD(float* pVecA, float* pVecB, float* pRes)
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
 
     int i = 0;
-    for (; i < resultArraySize; ++i)
-    {
+    for (; i < resultArraySize; ++i) {
         pResSIMD[i] = _mm256_add_ps(pVecASIMD[i], pVecBSIMD[i]);
     }
     const auto endTimePoint = std::chrono::high_resolution_clock::now();
@@ -236,8 +234,7 @@ void dotProductSIMD(float* pVecA, float* pVecB)
 
     int i = 0;
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
-    for (; i < resultArraySize; ++i)
-    {
+    for (; i < resultArraySize; ++i) {
         pResult = _mm256_add_ps(pResult, _mm256_mul_ps(pVecASIMD[i], pVecBSIMD[i]));
     }
 
