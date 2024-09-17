@@ -28,8 +28,11 @@ C++ tasks are implemented for the Linux environment (WSL) and g++ compiler.
 **SSE**
 `g++ -Wall -o task_<n> task_<n>.cpp -O3 -msse2`
 
-**AVX**
+**AVX integer calculations**
 `g++ -Wall -o task_<n> task_<n>.cpp -O3 -mavx2`
+
+**AVX float calculations**
+`g++ -Wall -o task_<n> task_<n>.cpp -O3 -mavx2 -mfma`
 
 ### Run
 `./task_<n>`

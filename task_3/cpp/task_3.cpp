@@ -235,7 +235,7 @@ void dotProductSIMD(float* pVecA, float* pVecB)
     int i = 0;
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
     for (; i < resultArraySize; ++i) {
-        pResult = _mm256_add_ps(pResult, _mm256_mul_ps(pVecASIMD[i], pVecBSIMD[i]));
+        pResult = _mm256_fmadd_ps(pVecASIMD[i], pVecBSIMD[i], pResult);
     }
 
     __m128 highRes = _mm256_extractf128_ps(pResult, 1); // first 128 bits of data

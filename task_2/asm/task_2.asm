@@ -212,7 +212,7 @@ add_simd:
         jmp .loop_process_pack
 
     .check_remainder:
-        shl ebp, 3                  ; multiple by 4 to receive final processed element index
+        shl ebp, 3                  ; multiple by 8 to receive final processed element index
         .loop_process_remainder:
             cmp ebp, ARRAY_LENGTH   ; check index
             jge .done
