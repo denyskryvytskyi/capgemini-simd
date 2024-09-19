@@ -8,6 +8,8 @@
  *  - With optimization flags -O3 -mavx2:
  *      - Loop-based execution time: 80-300 ms
  *      - SIMD-based execution time: ~70 ms (overall faster)
+ * TODO:
+ *  - remainder calculation: use SSE2 for less then 8 but more then 4 remainded numbers
  **/ 
 
 #include <immintrin.h>  // AVX

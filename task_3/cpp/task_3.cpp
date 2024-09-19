@@ -15,6 +15,8 @@
  *      - With optimization flags -O3 -mavx2:
  *          - Loop-based execution time: ~130 ms
  *          - SIMD-based execution time: ~40 ms (overall faster)
+ * * TODO:
+ *  - remainder calculation: use SSE2 for less then 8 but more then 4 remainded numbers
  **/ 
 
 #include <immintrin.h>  // AVX
@@ -29,7 +31,6 @@ constexpr int32_t ALIGNMENT = 32;
 constexpr bool PRINT_VEC = false;
 constexpr float VEC_A_OFFSET = 0.2f;
 constexpr float VEC_B_OFFSET = 1.3f;
-constexpr int32_t FLOAT_PRECISION = 4;
 
 bool checkSIMDSupport();
 
