@@ -31,10 +31,10 @@ section .data
     msg_B db "Vector B: ", 0
     msg_B_len equ $ - msg_B
 
-    msg_loop_res db "====== Loop-based results ======", 0
+    msg_loop_res db "====== Loop-based results ======", 0xa
     msg_loop_res_len equ $ - msg_loop_res
 
-    msg_simd_res db "====== SIMD-based results ======", 0
+    msg_simd_res db "====== SIMD-based results ======", 0xa
     msg_simd_res_len equ $ - msg_simd_res
 
     msg_vec_sum_res db "A + B: ", 0
@@ -43,17 +43,13 @@ section .data
     msg_vec_dot_product_res db "A * B: ", 0
     msg_vec_dot_product_res_len equ $ - msg_vec_dot_product_res
 
-    alloc_failed db "Allocation is failed ", 0
+    alloc_failed db "Allocation is failed ", 0xa
     alloc_failed_len equ $ - alloc_failed
-
-    alloc_success db "Allocation is succesfull ", 0
-    alloc_success_len equ $ - alloc_success
 
     msg_timer db "Exectuion time (ms): ", 0
     msg_timer_len equ $ - msg_timer
 
     newline_ascii db 0xa                                ; newline character
-    space_ascii db 0x20                                 ; space character
 
     ; timer vars
     start_time dq 0
@@ -133,15 +129,13 @@ main:
         mov rsi, msg_loop_res
         mov rdx, msg_loop_res_len
         call print_string   ; print header
-        call print_newline
         call add
         call dot_product
 
         ; SIMD
         mov rsi, msg_simd_res
         mov rdx, msg_simd_res_len
-        call print_string   
-        call print_newline
+        call print_string   ; print header
         call add_simd
         call dot_product_simd
 
@@ -159,7 +153,6 @@ main:
         mov rsi, alloc_failed
         mov rdx, alloc_failed_len
         call print_string
-        call print_newline
 
     .exit:
         mov eax, SYS_EXIT                   ; sys_exit system call
@@ -299,7 +292,6 @@ dot_product:
     mov rsi, msg_vec_dot_product_res
     mov rdx, msg_vec_dot_product_res_len
     call print_string
-test_1:
     call print_dot_product
     call timer_result           ; print timer results
 
@@ -447,9 +439,6 @@ print_vector:
         call printf                             ; call printf to print the value
 
     .end_print_loop:
-        ;add rsp, 8
-        ;mov rsp, rbp
-        ;pop rbp
 ret
 
 print_dot_product:
