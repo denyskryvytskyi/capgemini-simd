@@ -1,10 +1,12 @@
 /**
  * TASK: Matrix Multiplication Using SIMD
+ * NOTE: As matrix dimension may not be multiple of 8, loadu and storeu intrinsics are used for this edge case. Even if we allocate aligned dynamic memory, iterating by rows/columns may cause unaligned memory loading to simd registers. Possible solution in TODO.
  * RESULTS: (for square matrix with dimension = 1000) 
  *      - With optimization flags -O3 -mavx2 -mfma:
  *          - Loop-based execution time: ~1300 ms
  *          - SIMD-based execution time: ~200 ms
  * TODO:
+ *  - check if we doesn't have remainder (dimension is multiple of 8), then use simd intrinsics for aligned
  *  - support of the rectangular matrix with different rows and columns size
  **/ 
 
@@ -12,7 +14,6 @@
 #include <cpuid.h>      // __get_cpuid
 #include <iostream>
 #include <chrono>       // timestamp
-#include <iomanip>      // setprecision
 
 constexpr int32_t MAT_DIM = 1000; // dimension of the matrix
 constexpr int32_t MAT_SIZE = MAT_DIM * MAT_DIM;
@@ -20,22 +21,25 @@ constexpr int32_t SIMD_AVX_WIDTH = 8;   // 8 bytes - 256 bits
 constexpr int32_t SIMD_SSE_WIDTH = 4;   // 4 bytes - 128 bits
 constexpr int32_t ALIGNMENT = 32;
 constexpr bool PRINT_MAT = false;
-constexpr float MAT_A_OFFSET = 0.0f;
-constexpr float MAT_B_OFFSET = 1.0f;
+constexpr float MAT_A_OFFSET = 0.5f;
+constexpr float MAT_B_OFFSET = 1.5f;
 
+bool isSupportedSSE2();
+bool isSupportedAVX();
+bool isSupportedAVX512();
 bool checkSIMDSupport();
 
 void allocMat(float*& pMat);
-void initData(float* pMatA, float* pMatB);
+void initData(float* pMatA, float* pMatB, float* pMatRes);
+void resetRes(float* pMatRes);
 void printMat(float* pMat);
+
 void matMul(float* pMatA, float* pMatB, float* pMatRes);
 void matMulSIMD(float* pMatA, float* pMatB, float* pMatRes);
 
 int main()
 {
-    if (checkSIMDSupport()) {
-        return -1;
-    }
+    const bool isSIMDSupport = checkSIMDSupport();
 
     float* pMatA = nullptr;
     float* pMatB = nullptr;
@@ -45,7 +49,7 @@ int main()
     allocMat(pMatB);
     allocMat(pMatRes);
 
-    initData(pMatA, pMatB);
+    initData(pMatA, pMatB, pMatRes);
 
     if (PRINT_MAT) {
         std::cout << "Mat A:\n";
@@ -56,7 +60,11 @@ int main()
     }
 
     matMul(pMatA, pMatB, pMatRes);
-    matMulSIMD(pMatA, pMatB, pMatRes);
+    resetRes(pMatRes);
+
+    if (isSIMDSupport) {
+        matMulSIMD(pMatA, pMatB, pMatRes);
+    }
 
     free(pMatA);
     free(pMatB);
@@ -97,18 +105,18 @@ bool checkSIMDSupport()
 {
     if (!isSupportedSSE2()) {
         std::cerr << "SSE2 is not supported on this CPU." << std::endl;
-        return -1;
+        return false;
     }
     if (!isSupportedAVX()) {
         std::cerr << "AVX is not supported on this CPU." << std::endl;
 
-        return -1;
+        return false;
     }
     if (!isSupportedAVX512()) {
-        // std::cerr << "AVX512 is not supported on this CPU." << std::endl;
+        std::cerr << "AVX512 is not supported on this CPU." << std::endl;
     }
     
-    return 0;
+    return true;
 }
 
 void allocMat(float*& pMat)
@@ -118,11 +126,19 @@ void allocMat(float*& pMat)
     }
 }
 
-void initData(float* pMatA, float* pMatB)
+void initData(float* pMatA, float* pMatB, float* pMatRes)
 {
     for (int i = 0; i < MAT_SIZE; ++i) {
         pMatA[i] = static_cast<float>(i) + MAT_A_OFFSET;
         pMatB[i] = static_cast<float>(i) + MAT_B_OFFSET;
+        pMatRes[i] = 0.0f;
+    }
+}
+
+void resetRes(float* pMatRes)
+{
+   for (int i = 0; i < MAT_SIZE; ++i) {
+        pMatRes[i] = 0.0f;
     }
 }
 
@@ -141,13 +157,13 @@ void printMat(float* pMat)
 
 void matMul(float* pMatA, float* pMatB, float* pMatRes)
 {
+    std::cout << "===== Loop-based Matrix Multiplication =====\n";
+
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
     for (int row = 0; row < MAT_DIM; ++row)
     {
         for (int col = 0; col < MAT_DIM; ++col)
         {
-            // find sum for the one element of the result matrix by multipling row and col 
-            // of the two matrix per element
             float elementRes = 0.0f;
             for (int i = 0; i < MAT_DIM; ++i)
             {
@@ -170,6 +186,8 @@ void matMul(float* pMatA, float* pMatB, float* pMatRes)
 
 void matMulSIMD(float* pMatA, float* pMatB, float* pMatRes)
 {
+    std::cout << "===== SIMD-based Matrix Multiplication =====\n";
+
     int remainder = MAT_DIM % SIMD_AVX_WIDTH;
 
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
@@ -177,33 +195,35 @@ void matMulSIMD(float* pMatA, float* pMatB, float* pMatRes)
     {
         for (int col = 0; col < MAT_DIM - remainder; col += SIMD_AVX_WIDTH)
         {
-            // find sum for the one element of the result matrix by multipling row and col 
-            // of the two matrix per element
-            __m256 c = _mm256_setzero_ps(); // Initialize accumulator register to zero
+            __m256 rowRes = _mm256_setzero_ps(); // initialize accumulator register to zero
             for (int i = 0; i < MAT_DIM; ++i)
             {
-                __m256 a = _mm256_set1_ps(pMatA[row * MAT_DIM + i]);  // Broadcast A[i, k] across all elements
-                __m256 b = _mm256_loadu_ps(&pMatB[i * MAT_DIM + col]); // Load 8 floats from B[k, j:j+7]
-                c = _mm256_fmadd_ps(a, b, c);             // Multiply and add (fused multiply-add)
+                const __m256 a = _mm256_set1_ps(pMatA[row * MAT_DIM + i]); // set the same 1 float value
+
+                // load 8 float numbers
+                // Else: load using potentially unaligned memory
+                const __m256 b = _mm256_loadu_ps(&pMatB[i * MAT_DIM + col]);
+                rowRes = _mm256_fmadd_ps(a, b, rowRes); // fused multiply-add
             }
 
-            _mm256_storeu_ps(&pMatRes[row * MAT_DIM + col], c);
+            _mm256_storeu_ps(&pMatRes[row * MAT_DIM + col], rowRes);
         }
 
         // handle the remaining columns using SSE2 if possible
         if (remainder >= SIMD_SSE_WIDTH)
         {
-            // // process using sse2
-    
-            // for (int col = MAT_DIM - remainder; col < MAT_DIM; ++col) {
-            //     float sum = 0.0f;
-            //     for (int i = 0; i < MAT_DIM; ++i) {
-            //         sum += pMatA[row * MAT_DIM + i] * pMatB[i * MAT_DIM + col];
-            //     }
-            //     pMatRes[row * MAT_DIM + col] = sum;
-            // }
+            // process using sse2
+            for (int col = MAT_DIM - remainder; col < MAT_DIM; col += SIMD_SSE_WIDTH) {
+                __m128 sum = _mm_setzero_ps(); // initialize accumulator register to zero
+                for (int i = 0; i < MAT_DIM; ++i) {
+                    const __m128 a = _mm_set1_ps(pMatA[row * MAT_DIM + i]);  // use 1 float number from matrix A
+                    const __m128 b = _mm_loadu_ps(&pMatB[i * MAT_DIM + col]); // load 4 floats from the matrix B
+                    sum = _mm_fmadd_ps(a, b, sum);             // fused multiply-add
+                }
+                _mm_storeu_ps(&pMatRes[row * MAT_DIM + col], sum);
+            }
             
-            // remainder = remainder % SIMD_SSE_WIDTH;
+            remainder = remainder % SIMD_SSE_WIDTH;
         }
 
         // handle the remaining columns (remainder part)
