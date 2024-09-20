@@ -1,7 +1,14 @@
 ; TASK: Matrix Multiplication Using SIMD
+; NOTE: we align dynamically alloted matrices, but due to the multiplication algorithm there is an edge case if we have matrix dimension that is not multiple of 8. Then we have situation when we try to load unaligned memory to simd registers. So to handle this I have used instructions for unaligned memory location for now. Possible solutions also mentioned in TODO.
 ; RESULTS (for matrices with dimension 1000):
-;       - Loop-based execution time: ~ ms
-;       - SIMD-based execution time: ~ ms
+;       - Loop-based execution time: ~1700-1800 ms
+;       - SIMD-based execution time: ~450 ms
+; TODO (possible improvements):
+;   - reactangle matrix processing (with different row and column dimensions)
+;   - usage of simd instructions for aligned memory when matrix dimension is multiple of 8:
+;       - add conditional logic depending on dimension directly in current algorithm
+;       - make seperate implementation of the algorithm in other procedure
+;       - other algorithm for multiplication approach (e.g. transpose second matrix)
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60
@@ -11,6 +18,7 @@ MAT_DIM equ 1000                              ; matrix dimension
 FLOAT_SIZE equ 4                            ; size in bytes
 MAT_LENGTH equ MAT_DIM * MAT_DIM            ; amount of numbers in matrix
 MAT_SIZE equ MAT_LENGTH * FLOAT_SIZE        ; size in bytes
+SIMD_AVX_WIDTH equ 8                        ; 8 float numbers
 ALIGNMENT equ 32
 
 PRINT_MAT equ 0                             ; flag to print vectors (1 - print, 0 - don't print)
@@ -18,6 +26,10 @@ CPU_FREQ equ 2808000000                     ; CPU frequency of my CPU for execut
 MS_IN_SEC equ 1000                          ; ms in one sec
 
 section .data
+    start_time dq 0
+    end_time dq 0
+
+section .rodata
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
     msg_AVX db "AVX is not supported on this CPU.", 0
@@ -44,18 +56,14 @@ section .data
     msg_timer db "Exectuion time (ms): ", 0
     msg_timer_len equ $ - msg_timer
 
-    newline_ascii db 0xa                            ; newline character
-
-    ; timer vars
-    start_time dq 0
-    end_time dq 0
-
-    START_MAT_VAL dd 1.0                            ; start value for the first vector element
-    INIT_STEP dd 1.0                                ; step for vector element value on every iteration of init
     fmt_space db "%f ", 0                           ; format string for float with space
     fmt_newline db "%f", 10, 0                      ; format string for last float with newline
     fmt_timer db "Execution time: %d ms.", 10, 0    ; format string for integer (execution time in ms)
 
+    newline_ascii db 0xa                            ; newline character
+
+    START_MAT_VAL dd 1.0                            ; start value for the first vector element
+    INIT_STEP dd 1.0                                ; step for vector element value on every iteration of init
 
 section .bss
     matA_ptr resq 1
@@ -238,67 +246,115 @@ multiply_simd:
     push rbp
     mov rbp, rsp
 
-    mov rcx, MAT_DIM
     mov rsi, [matA_ptr]      ; pointer to matrix A
     mov rdi, [matB_ptr]      ; pointer to matrix B
     mov rbx, [mat_res_ptr]   ; pointer to result matrix
 
-    xor r12, r12             ; row index
-    xor r13, r13             ; column index
+    xor r12, r12             ; matrix A index
+    xor r13, r13             ; matrix B index
     xor r14, r14             ; element index
 
-    call timer_start            ; get the start time
-    .row_loop:
-        cmp r12, rcx
+    ; find remainder
+    mov eax, MAT_DIM
+    mov ecx, SIMD_AVX_WIDTH
+    xor edx, edx            ; clear edx for division
+    div ecx                 ; divide eax by ecx, now edx contains the remainder
+
+    ; Algorithm of multiplication:
+    ; 1. mat_A_loop (outer) - loop through the matrix A by row per iteration
+    ; 2. mat_B_loop (inner) - loop through the matrix A by row per iteration
+    ; 3. row loop (inner for matrix B loop) -> process 8 pack numbers per iteration.
+    ; One iteration of the outer loop -> final row values for result matrix
+    ; Remainder check every iteration for outer loop (if there are remaining elements in matrix B)
+    call timer_start         ; get the start time
+    .mat_A_loop:
+        cmp r12, MAT_DIM
         jge .done
 
-        xor r13, r13
-        .col_loop:
-            cmp r13, rcx
-            jge .done_col_loop  ; next row if column loop is done
+        xor r13, r13         ; reset index
+        .mat_B_loop:
+            cmp r13, MAT_DIM
+            jge .next_B_row  ; next row of the matrix B
 
             xor r14, r14
             vxorps ymm0, ymm0
-            vxorps ymm1, ymm1
-            vxorps ymm2, ymm2
-            .element_loop:
-                cmp r14, rcx
-                jge .done_element_loop                  ; next row if column loop is done
+            .row_loop:
+                cmp r14, MAT_DIM
+                jge .store_element              ; next 8 float pack
 
                 ; find index of element from matrix A
-                mov rax, r12    ; current row
-                imul rax, rcx         ; multiplied by matrix dimension
-                add rax, r14    ; add current column 
-                shl rax, 2  ; multiply by 4 (size of float)
-                vbroadcastss ymm1, [rsi + rax] ; mov 1 elements from matrix A to all values of ymm
+                mov rax, MAT_DIM                ; matrix dimension
+                mul r12                         ; multiplied by current row from matrix A
+                add rax, r14                    ; add current row from matrix B
+                shl rax, 2                      ; multiply by 4 (size of float)
+                vbroadcastss ymm1, [rsi + rax]  ; mov 1 elements from matrix A to all values of ymm
 
                 ; find index of pack of elements from matrix B
-                mov rax, r14    ; current row
-                imul rax, rcx         ; multiplied by matrix dimension
-                add rax, r13    ; add current column 
-                shl rax, 2      ; multiply by 4 (size of float)
-                vmovaps ymm2, [rdi + rax]    ; move 8 element from matrix B
-                vmulps ymm1, ymm1, ymm2      ; multiply element from A with 8 elements from B
-                vaddps ymm0, ymm0, ymm1      ; accumulate result
+                mov rax, MAT_DIM                ; matrix dimension
+                mul r14                         ; multiplied by current row from matrix A
+                add rax, r13                    ; add current row from matrix B
+                shl rax, 2                      ; multiply by 4 (size of float)
+                vmovups ymm2, [rdi + rax]       ; move 8 element from matrix B
+                vfmadd231ps ymm0, ymm1, ymm2    ; multiply element from A with 8 elements from B and add to accumulator
                 inc r14
-                jmp .element_loop
-
-                .done_element_loop:
-                    ; find index of element for result matrix
-                    mov rax, r12
-                    imul rax, rcx
-                    add rax, r13
-                    shl rax, 2  ; multiply by 4 (size of float)
-                    vmovaps [rbx + rax], ymm0
-                    add r13, 8  ; next 8 block numbers
-                    jmp .col_loop
-
-            .done_col_loop:
-                inc r12
                 jmp .row_loop
 
-    .remainder_calculation:
-        ; calculate remainder if it exists
+                .store_element:
+                    ; find index of element for result matrix
+                    mov rax, MAT_DIM
+                    mul r12
+                    add rax, r13
+                    shl rax, 2  ; multiply by 4 (size of float)
+                    vmovups [rbx + rax], ymm0
+                    add r13, 8  ; next 8 block numbers
+                    jmp .mat_B_loop
+
+            .next_B_row:
+                ; check remainder
+                test rdx, rdx
+                jz .next_iteration
+
+                ; calculate remainder
+                mov r13, MAT_DIM  ; start index
+                sub r13, rdx
+                .remainder_loop:
+                    cmp r13, MAT_DIM
+                    jge .next_iteration
+                    xor r14, r14
+                    xorps xmm0, xmm0
+                    .inner_loop:
+                        cmp r14, MAT_DIM
+                        jge .done_inner_loop
+                        ; find index of element from matrix A
+                        mov rax, MAT_DIM
+                        mul r12
+                        add rax, r14
+                        shl rax, 2  ; multiply by 4 (size of float)
+                        movss xmm1, [rsi + rax]    ; mov element from matrix A
+
+                        ; find index of element from matrix B
+                        mov rax, MAT_DIM
+                        mul r14
+                        add rax, r13
+                        shl rax, 2  ; multiply by 4 (size of float)
+                        movss xmm2, [rdi + rax]    ; add element from matrix B
+                        mulss xmm1, xmm2
+                        addss xmm0, xmm1
+                        inc r14
+                        jmp .inner_loop
+
+                        .done_inner_loop:
+                            ; find index of element for result matrix
+                            mov rax, MAT_DIM
+                            mul r12
+                            add rax, r13
+                            shl rax, 2  ; multiply by 4 (size of float)
+                            movss [rbx + rax], xmm0
+                            inc r13
+                            jmp .remainder_loop
+                .next_iteration:
+                    inc r12
+                    jmp .mat_A_loop
 
     .done:
         call timer_end              ; get the end time

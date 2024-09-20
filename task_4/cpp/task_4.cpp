@@ -190,49 +190,59 @@ void matMulSIMD(float* pMatA, float* pMatB, float* pMatRes)
 
     int remainder = MAT_DIM % SIMD_AVX_WIDTH;
 
+
+    /**
+     * Algorithm of multiplication:
+     * 1. matrix A loop (outer) - loop through the matrix A by row per iteration.
+     * 2. matrix B loop (inner) - loop through the matrix B by row per iteration.
+     * 3. row loop (inner for matrix B loop) -> process 8 pack numbers per iteration.
+     * One iteration of the outer loop -> final row values for result matrix
+     * Remainder check every iteration for outer loop (if there are remaining elements in matrix B)
+     * Remainder check involves:
+     *  - check if we it possible to use SSE (if size >= 4)
+     *  - process remaining elements
+     * 
+    */
     const auto startTimePoint = std::chrono::high_resolution_clock::now();
-    for (int row = 0; row < MAT_DIM; ++row)
+    for (int mat_A_idx = 0; mat_A_idx < MAT_DIM; ++mat_A_idx)
     {
-        for (int col = 0; col < MAT_DIM - remainder; col += SIMD_AVX_WIDTH)
+        for (int mat_B_idx = 0; mat_B_idx < MAT_DIM - remainder; mat_B_idx += SIMD_AVX_WIDTH)
         {
-            __m256 rowRes = _mm256_setzero_ps(); // initialize accumulator register to zero
+            __m256 packRes = _mm256_setzero_ps(); // initialize accumulator register to zero
             for (int i = 0; i < MAT_DIM; ++i)
             {
-                const __m256 a = _mm256_set1_ps(pMatA[row * MAT_DIM + i]); // set the same 1 float value
-
-                // load 8 float numbers
-                // Else: load using potentially unaligned memory
-                const __m256 b = _mm256_loadu_ps(&pMatB[i * MAT_DIM + col]);
-                rowRes = _mm256_fmadd_ps(a, b, rowRes); // fused multiply-add
+                const __m256 a = _mm256_set1_ps(pMatA[mat_A_idx * MAT_DIM + i]);    // set the same 1 float value
+                const __m256 b = _mm256_loadu_ps(&pMatB[i * MAT_DIM + mat_B_idx]);  // load 8 float numbers
+                packRes = _mm256_fmadd_ps(a, b, packRes);                           // fused multiply-add
             }
 
-            _mm256_storeu_ps(&pMatRes[row * MAT_DIM + col], rowRes);
+            _mm256_storeu_ps(&pMatRes[mat_A_idx * MAT_DIM + mat_B_idx], packRes);
         }
 
         // handle the remaining columns using SSE2 if possible
         if (remainder >= SIMD_SSE_WIDTH)
         {
             // process using sse2
-            for (int col = MAT_DIM - remainder; col < MAT_DIM; col += SIMD_SSE_WIDTH) {
-                __m128 sum = _mm_setzero_ps(); // initialize accumulator register to zero
+            for (int mat_B_idx = MAT_DIM - remainder; mat_B_idx < MAT_DIM; mat_B_idx += SIMD_SSE_WIDTH) {
+                __m128 remainderRes = _mm_setzero_ps(); // initialize accumulator register to zero
                 for (int i = 0; i < MAT_DIM; ++i) {
-                    const __m128 a = _mm_set1_ps(pMatA[row * MAT_DIM + i]);  // use 1 float number from matrix A
-                    const __m128 b = _mm_loadu_ps(&pMatB[i * MAT_DIM + col]); // load 4 floats from the matrix B
-                    sum = _mm_fmadd_ps(a, b, sum);             // fused multiply-add
+                    const __m128 a = _mm_set1_ps(pMatA[mat_A_idx * MAT_DIM + i]);  // use 1 float number from matrix A
+                    const __m128 b = _mm_loadu_ps(&pMatB[i * MAT_DIM + mat_B_idx]); // load 4 floats from the matrix B
+                    remainderRes = _mm_fmadd_ps(a, b, remainderRes);             // fused multiply-add
                 }
-                _mm_storeu_ps(&pMatRes[row * MAT_DIM + col], sum);
+                _mm_storeu_ps(&pMatRes[mat_A_idx * MAT_DIM + mat_B_idx], remainderRes);
             }
             
             remainder = remainder % SIMD_SSE_WIDTH;
         }
 
         // handle the remaining columns (remainder part)
-        for (int col = MAT_DIM - remainder; col < MAT_DIM; ++col) {
+        for (int mat_B_idx = MAT_DIM - remainder; mat_B_idx < MAT_DIM; ++mat_B_idx) {
             float sum = 0.0f;
             for (int i = 0; i < MAT_DIM; ++i) {
-                sum += pMatA[row * MAT_DIM + i] * pMatB[i * MAT_DIM + col];
+                sum += pMatA[mat_A_idx * MAT_DIM + i] * pMatB[i * MAT_DIM + mat_B_idx];
             }
-            pMatRes[row * MAT_DIM + col] = sum;
+            pMatRes[mat_A_idx * MAT_DIM + mat_B_idx] = sum;
         }
     }
     const auto endTimePoint = std::chrono::high_resolution_clock::now();

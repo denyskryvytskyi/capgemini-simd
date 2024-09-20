@@ -4,8 +4,10 @@
 ;       - Loop-based execution time: ~250-350 ms
 ;       - SIMD-based execution time: ~70-80 ms
 ;   DOT PRODUCT:
-;       - Loop-based execution time: ~70-80 ms
-;       - SIMD-based execution time: ~40-50 ms
+;       - Loop-based execution time: ~180-200 ms
+;       - SIMD-based execution time: ~40 ms
+; TODO:
+;   - SSE for remainder if remainder size >= 4
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60
@@ -21,6 +23,10 @@ CPU_FREQ equ 2808000000                     ; CPU frequency of my CPU for execut
 MS_IN_SEC equ 1000                          ; ms in one sec
 
 section .data
+    start_time dq 0
+    end_time dq 0
+
+section .rodata
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
     msg_AVX db "AVX is not supported on this CPU.", 0
@@ -49,18 +55,14 @@ section .data
     msg_timer db "Exectuion time (ms): ", 0
     msg_timer_len equ $ - msg_timer
 
-    newline_ascii db 0xa                                ; newline character
-
-    ; timer vars
-    start_time dq 0
-    end_time dq 0
-
-    START_VECTOR_VAL dd 1.3                         ; start value for the first vector element
-    INIT_STEP dd 0.5                                ; step for vector element value on every iteration of init
     fmt_space db "%f ", 0                           ; format string for float with space
     fmt_newline db "%f", 10, 0                      ; format string for last float with newline
     fmt_timer db "Execution time: %d ms.", 10, 0    ; format string for integer (execution time in ms)
 
+    newline_ascii db 0xa                                ; newline character
+
+    START_VECTOR_VAL dd 1.3                         ; start value for the first vector element
+    INIT_STEP dd 0.5                                ; step for vector element value on every iteration of init
 
 section .bss
     result resd 1

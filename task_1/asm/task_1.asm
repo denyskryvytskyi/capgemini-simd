@@ -8,14 +8,18 @@ SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-ARRAY_LENGTH equ 19
+ARRAY_LENGTH equ 100000000
 INT_SIZE equ 4          ; size in bytes
 ITOA_BUFFER_SIZE equ 10 ; size in bytes
-PRINT_ARRAYS equ 1      ; flag to print arrays (1 - print, 0 - don't print)
+PRINT_ARRAYS equ 0      ; flag to print arrays (1 - print, 0 - don't print)
 CPU_FREQ equ 2808000000 ; CPU frequency for execution time calculation
 MS_IN_SEC equ 1000
 
 section .data
+    start_time dq 0
+    end_time dq 0
+
+section .rodata
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
     msg_AVX db "AVX is not supported on this CPU.", 0
@@ -40,10 +44,6 @@ section .data
 
     newline_ascii db 0xa    ; newline character
     space_ascii db 0x20     ; space character
-
-    ; timer vars
-    start_time dq 0
-    end_time dq 0
 
 section .bss
     arr_A resd ARRAY_LENGTH     ; array A

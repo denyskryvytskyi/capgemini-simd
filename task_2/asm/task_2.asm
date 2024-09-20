@@ -2,6 +2,8 @@
 ; RESULTS (for arrays with size 100'000'000)):
 ;  - Loop-based execution time: ~200-300 ms
 ;  - SIMD-based execution time: ~60-70 ms
+; TODO:
+;   - SSE and MMX for remainder if remainder size >= 4 or >= 2
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60
@@ -18,6 +20,10 @@ CPU_FREQ equ 2808000000                     ; CPU frequency for execution time c
 MS_IN_SEC equ 1000
 
 section .data
+    start_time dq 0
+    end_time dq 0
+
+section .rodata
     msg_SSE2 db "SSE2 is not supported on this CPU.", 0
     msg_SSE2_len equ $ - msg_SSE2
     msg_AVX db "AVX is not supported on this CPU.", 0
@@ -48,10 +54,6 @@ section .data
 
     newline_ascii db 0xa                                ; newline character
     space_ascii db 0x20                                 ; space character
-
-    ; timer vars
-    start_time dq 0
-    end_time dq 0
 
 section .bss
     itoa_result_buffer resb 20  ; buffer to store the number digits in string
