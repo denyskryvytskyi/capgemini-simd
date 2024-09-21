@@ -1,6 +1,6 @@
 ; TASK: Basic SIMD Operations
 ; NOTE: For this task I have used unaligned arrays and movups instruction to load unaligned data to simd register. In the second task I have dynamic arrays allocated in aligned memory.
-; RESULTS (for arrays with size 100'000'000)):
+; RESULTS (for arrays with size 100'000'000):
 ;  - Loop-based execution time: ~200-300 ms
 ;  - SIMD-based execution time: ~70-80 ms
 

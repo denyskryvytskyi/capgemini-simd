@@ -1,11 +1,11 @@
 ; TASK: Vector Addition and Dot Product Calculation Using SIMD
-; RESULTS (for vectors with size 100'000'000):
+; RESULTS (for vectors with size 100'000'00):
 ;   ADDITION:
-;       - Loop-based execution time: ~250-350 ms
-;       - SIMD-based execution time: ~70-80 ms
+;       - Loop-based execution time: ~27-30 ms
+;       - SIMD-based execution time: ~8 ms
 ;   DOT PRODUCT:
-;       - Loop-based execution time: ~180-200 ms
-;       - SIMD-based execution time: ~40 ms
+;       - Loop-based execution time: ~20 ms
+;       - SIMD-based execution time: ~3-5 ms
 ; TODO:
 ;   - SSE for remainder if remainder size >= 4
 
@@ -13,7 +13,7 @@ SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-VECTOR_LENGTH equ 100000000                 ; length of the vectors
+VECTOR_LENGTH equ 10000000                  ; length of the vectors
 FLOAT_SIZE equ 4                            ; size in bytes
 VECTOR_SIZE equ VECTOR_LENGTH * FLOAT_SIZE  ; 4 float * 4-byte
 ALIGNMENT equ 32
@@ -61,8 +61,8 @@ section .rodata
 
     newline_ascii db 0xa                                ; newline character
 
-    START_VECTOR_VAL dd 1.3                         ; start value for the first vector element
-    INIT_STEP dd 0.5                                ; step for vector element value on every iteration of init
+    START_VECTOR_VAL dd 1.0                         ; start value for the first vector element
+    INIT_STEP dd 1.0                                ; step for vector element value on every iteration of init
 
 section .bss
     result resd 1
@@ -283,13 +283,13 @@ dot_product:
     .process_vectors:
         movss xmm1, [rsi]
         movss xmm2, [rdi]
-        mulss xmm1, xmm2
-        addss xmm0, xmm1
+        vfmadd231ss xmm0, xmm1, xmm2
         add rsi, FLOAT_SIZE
         add rdi, FLOAT_SIZE
         loop .process_vectors
     call timer_end              ; get the end time
 
+    test:
     ; print result
     mov rsi, msg_vec_dot_product_res
     mov rdx, msg_vec_dot_product_res_len
@@ -318,8 +318,7 @@ dot_product_simd:
         jge .check_remainder
         vmovaps ymm1, [rsi]
         vmovaps ymm2, [rdi]
-        vmulps ymm1, ymm1, ymm2
-        vaddps ymm0, ymm0, ymm1
+        vfmadd231ps ymm0, ymm1, ymm2
         inc rdx
         add rsi, ALIGNMENT
         add rdi, ALIGNMENT
@@ -340,8 +339,7 @@ dot_product_simd:
             jge .done
             movss xmm1, [rsi]
             movss xmm2, [rdi]
-            mulss xmm1, xmm2
-            addss xmm0, xmm1
+            vfmadd231ss xmm0, xmm1, xmm2
             inc rdx
             add rsi, FLOAT_SIZE
             add rdi, FLOAT_SIZE

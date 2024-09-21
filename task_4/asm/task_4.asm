@@ -203,8 +203,7 @@ multiply:
                 add rax, r13
                 shl rax, 2  ; multiply by 4 (size of float)
                 movss xmm2, [rdi + rax]    ; add element from matrix B
-                mulss xmm1, xmm2
-                addss xmm0, xmm1
+                vfmadd231ss xmm0, xmm1, xmm2
                 inc r14
                 jmp .element_loop
 
@@ -338,8 +337,7 @@ multiply_simd:
                         add rax, r13
                         shl rax, 2  ; multiply by 4 (size of float)
                         movss xmm2, [rdi + rax]    ; add element from matrix B
-                        mulss xmm1, xmm2
-                        addss xmm0, xmm1
+                        vfmadd231ss xmm0, xmm1, xmm2
                         inc r14
                         jmp .inner_loop
 
