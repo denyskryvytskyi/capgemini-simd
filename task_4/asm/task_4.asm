@@ -1,8 +1,8 @@
 ; TASK: Matrix Multiplication Using SIMD
 ; NOTE: we align dynamically alloted matrices, but due to the multiplication algorithm there is an edge case if we have matrix dimension that is not multiple of 8. Then we have situation when we try to load unaligned memory to simd registers. So to handle this I have used instructions for unaligned memory location for now. Possible solutions also mentioned in TODO.
 ; RESULTS (for matrices with dimension 1000):
-;       - Loop-based execution time: ~1700-1800 ms
-;       - SIMD-based execution time: ~450 ms
+;       - Loop-based execution time: ~1550-1660 ms
+;       - SIMD-based execution time: ~300-350 ms
 ; TODO (possible improvements):
 ;   - reactangle matrix processing (with different row and column dimensions)
 ;   - usage of simd instructions for aligned memory when matrix dimension is multiple of 8:
@@ -14,7 +14,7 @@ SYS_WRITE equ 1
 SYS_EXIT equ 60
 STDOUT equ 1
 
-MAT_DIM equ 1000                              ; matrix dimension
+MAT_DIM equ 1000                            ; matrix dimension
 FLOAT_SIZE equ 4                            ; size in bytes
 MAT_LENGTH equ MAT_DIM * MAT_DIM            ; amount of numbers in matrix
 MAT_SIZE equ MAT_LENGTH * FLOAT_SIZE        ; size in bytes
@@ -162,9 +162,6 @@ main:
 ; =================== addition functions ===================
 
 multiply:
-    push rbp
-    mov rbp, rsp
-
     mov rcx, MAT_DIM
     mov rsi, [matA_ptr]      ; pointer to matrix A
     mov rdi, [matB_ptr]      ; pointer to matrix B
@@ -237,14 +234,9 @@ multiply:
 
     .exit:
         call timer_result           ; print timer results
-        mov rsp, rbp
-        pop rbp
 ret
 
 multiply_simd:
-    push rbp
-    mov rbp, rsp
-
     mov rsi, [matA_ptr]      ; pointer to matrix A
     mov rdi, [matB_ptr]      ; pointer to matrix B
     mov rbx, [mat_res_ptr]   ; pointer to result matrix
@@ -370,8 +362,6 @@ multiply_simd:
 
     .exit:
         call timer_result           ; print timer results
-        mov rsp, rbp
-        pop rbp
 ret
 
 ; =================== helpers ===================
@@ -429,6 +419,15 @@ init_data:
 ret
 
 print_mat:
+    ; align the stack (needed for calling printf)
+    mov r15, rsp         ; copy rsp to r9 for alignment calculation
+    test r15, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
+
     xor r12, r12    ; row index, non-volatile for printf function call
     xor r14, r14
     xor rsi, rsi
@@ -463,13 +462,22 @@ print_mat:
                 jmp .print_row_loop                  ; next row
 
     .end_loop:
+        ; check stack pointer alignment
+        cmp r15, rsp         ; check if we adjusted the stack (from earlier alignment check)
+        je .adjusted        ; jump if rsp was adjusted
+
+        add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+        .adjusted:
 ret
 
 print_string:
-push rbx
+    push rbx
+
     mov rax, SYS_WRITE
     mov rdi, STDOUT
     syscall
+
     pop rbx
 ret
 
@@ -500,6 +508,15 @@ timer_end:
 ret
 
 timer_result:
+    ; align the stack (needed for calling printf)
+    mov r15, rsp         ; copy rsp to r9 for alignment calculation
+    test r15, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
+
     ; calculate elapsed CPU cycles
     mov rax, [end_time]         ; load end time
     sub rax, [start_time]       ; subtract start time to get elapsed cycles
@@ -515,4 +532,12 @@ timer_result:
     mov rdi, fmt_timer                          ; format string for integer
     xor rax, rax                                ; printf uses rax to count floating-point args, set it to 0
     call printf                                 ; call printf to print the integer
+
+    ; check stack pointer alignment
+    cmp r15, rsp         ; check if we adjusted the stack (from earlier alignment check)
+    je .adjusted        ; jump if rsp was adjusted
+
+    add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+    .adjusted:
 ret

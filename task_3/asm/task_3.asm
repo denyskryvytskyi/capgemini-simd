@@ -164,9 +164,6 @@ main:
 ; =================== addition functions ===================
 
 add:
-    push rbp
-    mov rbp, rsp
-
     mov rcx, VECTOR_LENGTH
     mov rsi, [vecA_ptr]         ; pointer to vector A
     mov rdi, [vecB_ptr]         ; pointer to vector B
@@ -198,14 +195,9 @@ add:
 
     .exit:
         call timer_result   ; print timer results
-        mov rsp, rbp
-        pop rbp
 ret
 
 add_simd:
-    push rbp
-    mov rbp, rsp
-
     mov rcx, VECTOR_LENGTH      ; vector size
     shr rcx, 3                  ; divide by 8 to find amount of 256-register values
     mov rsi, [vecA_ptr]         ; pointer to vector A
@@ -264,16 +256,11 @@ add_simd:
 
     .exit:
         call timer_result   ; print timer results
-        mov rsp, rbp
-        pop rbp
 ret
 
 ; =================== dot product functions ===================
 
 dot_product:
-    push rbp
-    mov rbp, rsp
-
     mov rsi, [vecA_ptr]         ; pointer to vector A
     mov rdi, [vecB_ptr]         ; pointer to vector B
     mov rcx, VECTOR_LENGTH      ; vector size
@@ -296,15 +283,9 @@ dot_product:
     call print_string
     call print_dot_product
     call timer_result           ; print timer results
-
-    mov rsp, rbp
-    pop rbp
 ret
 
 dot_product_simd:
-    push rbp
-    mov rbp, rsp
-
     mov rsi, [vecA_ptr]         ; pointer to vector A
     mov rdi, [vecB_ptr]         ; pointer to vector B
     mov rcx, VECTOR_LENGTH      ; vector size
@@ -354,9 +335,6 @@ dot_product_simd:
         call print_string
         call print_dot_product
         call timer_result           ; print timer results
-
-        mov rsp, rbp
-        pop rbp
 ret
 
 ; =================== helpers ===================
@@ -414,6 +392,15 @@ init_data:
 ret
 
 print_vector:
+    ; align the stack (needed for calling printf)
+    mov r15, rsp         ; copy rsp to r9 for alignment calculation
+    test r15, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
+
     xor r12, r12    ; index, non-volatile for printf function call
     xor rsi, rsi
 
@@ -439,13 +426,37 @@ print_vector:
         call printf                             ; call printf to print the value
 
     .end_print_loop:
+        ; check stack pointer alignment
+        cmp r15, rsp         ; check if we adjusted the stack (from earlier alignment check)
+        je .adjusted        ; jump if rsp was adjusted
+
+        add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+        .adjusted:
 ret
 
 print_dot_product:
+    ; align the stack (needed for calling printf)
+    mov r15, rsp         ; copy rsp to r9 for alignment calculation
+    test r15, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
+
     cvtss2sd xmm0, xmm0         ; convert to double as printf expects double
     mov rdi, fmt_newline        ; format string
     mov rax, 1
     call printf                 ; call printf to print the value
+
+    ; check stack pointer alignment
+    cmp r15, rsp         ; check if we adjusted the stack (from earlier alignment check)
+    je .adjusted        ; jump if rsp was adjusted
+
+    add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+    .adjusted:
 ret
 
 print_string:
@@ -481,6 +492,15 @@ timer_end:
 ret
 
 timer_result:
+    ; align the stack (needed for calling printf)
+    mov r15, rsp         ; copy rsp to r9 for alignment calculation
+    test r15, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
+    
     ; calculate elapsed CPU cycles
     mov rax, [end_time]         ; load end time
     sub rax, [start_time]       ; subtract start time to get elapsed cycles
@@ -496,4 +516,12 @@ timer_result:
     mov rdi, fmt_timer                          ; format string for integer
     xor rax, rax                                ; printf uses rax to count floating-point args, set it to 0
     call printf                                 ; call printf to print the integer
+
+    ; check stack pointer alignment
+    cmp r15, rsp         ; check if we adjusted the stack (from earlier alignment check)
+    je .adjusted        ; jump if rsp was adjusted
+
+    add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+    .adjusted:
 ret

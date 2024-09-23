@@ -1,505 +1,307 @@
-; TASK: Matrix Multiplication Using SIMD
-; NOTE: we align dynamically alloted matrices, but due to the multiplication algorithm there is an edge case if we have matrix dimension that is not multiple of 8. Then we have situation when we try to load unaligned memory to simd registers. So to handle this I have used instructions for unaligned memory location for now. Possible solutions also mentioned in TODO.
-; RESULTS (for matrices with dimension 1000):
-;       - Loop-based execution time: ~1700-1800 ms
-;       - SIMD-based execution time: ~450 ms
-; TODO (possible improvements):
-;   - reactangle matrix processing (with different row and column dimensions)
-;   - usage of simd instructions for aligned memory when matrix dimension is multiple of 8:
-;       - add conditional logic depending on dimension directly in current algorithm
-;       - make seperate implementation of the algorithm in other procedure
-;       - other algorithm for multiplication approach (e.g. transpose second matrix)
+; TASK: String Processing Using SIMD
+; NOTE: 
+;    - I have implemented string reading from file to test on really large string.
+;    - Implementation support search only for substring with length <= 16.
+; RESULTS (with the string length equals 50'000'000):
+;       - Loop-based execution time: ~60-50 ms
+;       - SIMD-based execution time: ~50-55 ms (approximately 10 ms less then loop-based)
+; CONCLUSION: According to the performance results improvement isn't too big. So, there is a bottleneck in simd substring search implementation because we compare first character of the string with first character of substring  on every iteration of the main loop and only then (when first characters are the same) use simd for substring check.
+;   - loop unrolling: split the big string of the smaller parts and search in all of them in one iteration of the main loop iteration.
+;   - reduce amount of branching in simd implementation
+;   - AVS register usage (if substring is less then 16, then we can check in 32 bytes of string at once)
 
+SYS_READ equ 0
 SYS_WRITE equ 1
 SYS_EXIT equ 60
+SYS_OPEN equ 2      ; open file
+SYS_CLOSE equ 3     ; close file
 STDOUT equ 1
 
-MAT_DIM equ 1000                              ; matrix dimension
-FLOAT_SIZE equ 4                            ; size in bytes
-MAT_LENGTH equ MAT_DIM * MAT_DIM            ; amount of numbers in matrix
-MAT_SIZE equ MAT_LENGTH * FLOAT_SIZE        ; size in bytes
-SIMD_AVX_WIDTH equ 8                        ; 8 float numbers
-ALIGNMENT equ 32
-
-PRINT_MAT equ 0                             ; flag to print vectors (1 - print, 0 - don't print)
-CPU_FREQ equ 2808000000                     ; CPU frequency of my CPU for execution time calculation
-MS_IN_SEC equ 1000                          ; ms in one sec
+PRINT_STRING equ 0         ; flag to print string and substring
+CPU_FREQ equ 2808000000     ; CPU frequency of my CPU for execution time calculation
+MS_IN_SEC equ 1000          ; ms in one sec
+STRING_SIZE equ 50000000    ; size in bytes of string to read from file)
+ERROR_FILE_NOT_FOUND equ -2
 
 section .data
     start_time dq 0
     end_time dq 0
+    string_length dq 0
 
 section .rodata
-    msg_SSE2 db "SSE2 is not supported on this CPU.", 0
-    msg_SSE2_len equ $ - msg_SSE2
-    msg_AVX db "AVX is not supported on this CPU.", 0
-    msg_AVX_len equ $ - msg_AVX
+    align 16
+    substring db "lorem"
+    substr_len equ $ - substring
 
-    msg_A db "Matrix A: ", 0xa
-    msg_A_len equ $ - msg_A
-    msg_B db "Matrix B: ", 0xa
-    msg_B_len equ $ - msg_B
-    msg_res db "Result Matrix: ", 0xa
-    msg_res_len equ $ - msg_res
-    msg_test db "== test ==", 0xa
-    msg_test_len equ $ - msg_test
-
+    INPUT_FILE_NAME db "input.txt", 0
+    
     msg_loop_res db "====== Loop-based results ======", 0xa
     msg_loop_res_len equ $ - msg_loop_res
 
     msg_simd_res db "====== SIMD-based results ======", 0xa
     msg_simd_res_len equ $ - msg_simd_res
 
-    alloc_failed db "Allocation is failed ", 0xa
-    alloc_failed_len equ $ - alloc_failed
+    error_file_msg db "Error: file not found", 0xa
+    error_file_msg_len equ $ - error_file_msg
 
-    msg_timer db "Exectuion time (ms): ", 0
-    msg_timer_len equ $ - msg_timer
-
-    fmt_space db "%f ", 0                           ; format string for float with space
-    fmt_newline db "%f", 10, 0                      ; format string for last float with newline
-    fmt_timer db "Execution time: %d ms.", 10, 0    ; format string for integer (execution time in ms)
-
-    newline_ascii db 0xa                            ; newline character
-
-    START_MAT_VAL dd 1.0                            ; start value for the first vector element
-    INIT_STEP dd 1.0                                ; step for vector element value on every iteration of init
+    fmt_count db "Substring count: %d.", 0xa, 0     ; format string for substring count
+    fmt_timer db "Execution time: %d ms.", 10, 0    ; format string for execution time in ms
 
 section .bss
-    matA_ptr resq 1
-    matB_ptr resq 1
-    mat_res_ptr resq 1
+    file_content_buffer resb STRING_SIZE
 
 section .text
-    extern posix_memalign
-    extern free
     extern printf
     global main
 
 main:
-    call check_simd_support
-    cmp rax, 1
+    call init_string_from_file
+    cmp rax, ERROR_FILE_NOT_FOUND
     je .exit
 
-    ; allocate matrix A
-    lea rdi, [matA_ptr]     ; (1st arg) load address of matrix (pointer to the pointer)
-    call alloc
-    test rax, rax           ; check if rax (return value) is 0 (success)
-    jnz .alloc_failed       ; if not zero, allocation failed
+    mov esi, file_content_buffer ; pointer to string
+    mov edi, substring           ; pointer to substring
+    mov ecx, [string_length]
 
-    ; allocate matrix B
-    lea rdi, [matB_ptr]     ; (1st arg) load address of matrix (pointer to the pointer)
-    call alloc
-    test rax, rax           ; check if rax (return value) is 0 (success)
-    jnz .alloc_failed       ; if not zero, allocation failed
-
-    ; allocate result matrix
-    lea rdi, [mat_res_ptr]  ; (1st arg) load address of matrix (pointer to the pointer)
-    call alloc
-    test rax, rax           ; check if rax (return value) is 0 (success)
-    jnz .alloc_failed       ; if not zero, allocation failed
-
-    ; init matrix A
-    mov rdi, [matA_ptr]     ; load the aligned memory pointer
-    call init_data
-
-    ; init matrix B
-    mov rdi, [matB_ptr]     ; load the aligned memory pointer
-    call init_data
-
-    ; check if we need to print matrices
-    mov ax, PRINT_MAT
-    test ax, ax
-    jz .calculation
-
-    ; print A
-    mov rsi, msg_A
-    mov rdx, msg_A_len
-    call print_string
-    mov rbx, [matA_ptr]
-    call print_mat
-
-    ; print B
-    mov rsi, msg_B
-    mov rdx, msg_B_len
-    call print_string
-    mov rbx, [matB_ptr]
-    call print_mat
-
-    .calculation:
-        ; Loop
-        mov rsi, msg_loop_res
-        mov rdx, msg_loop_res_len
-        call print_string   ; print header
-        call multiply
-
-        ; SIMD
-        mov rsi, msg_simd_res
-        mov rdx, msg_simd_res_len
-        call print_string   ; print header
-        call multiply_simd
-
-    ; free memory
-    mov rdi, [matA_ptr]
-    call free
-    mov rdi, [matB_ptr]
-    call free
-    mov rdi, [mat_res_ptr]
-    call free
-
-    jmp .exit
-
-    .alloc_failed:
-        mov rsi, alloc_failed
-        mov rdx, alloc_failed_len
-        call print_string
+    call count_substring
+    call count_substring_simd
 
     .exit:
-        mov eax, SYS_EXIT                   ; sys_exit system call
-        xor edi, edi                        ; exit status 0
-        syscall
+    mov eax, SYS_EXIT         ; exit system call
+    xor edi, edi              ; return code 0
+    syscall
 
-; =================== addition functions ===================
+; =================== substring match functions ===================
 
-multiply:
-    push rbp
-    mov rbp, rsp
+count_substring:
+    push rdi
+    push rsi
+    push rcx
 
-    mov rcx, MAT_DIM
-    mov rsi, [matA_ptr]      ; pointer to matrix A
-    mov rdi, [matB_ptr]      ; pointer to matrix B
-    mov rbx, [mat_res_ptr]   ; pointer to result matrix
+    ; align the stack (needed for calling printf)
+    mov r9, rsp         ; copy rsp to r9 for alignment calculation
+    test r9, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
 
-    xor r12, r12             ; row index
-    xor r13, r13             ; column index
-    xor r14, r14             ; element index
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
 
-    call timer_start            ; get the start time
-    .row_loop:
-        cmp r12, rcx
-        jge .done
+    .aligned:
 
-        xor r13, r13
-        .col_loop:
-            cmp r13, rcx
-            jge .done_col_loop  ; next row if column loop is done
+    xor eax, eax       ; init counter of the substring
+    xor r10, r10       ; init counter of the chars in one substring search check
 
-            xor r14, r14
-            xorps xmm0, xmm0
-            .element_loop:
-                cmp r14, rcx
-                jge .done_element_loop                  ; next row if column loop is done
+    call timer_start
+    .substring_search:
+        ; find starting char of substring
+        mov r8b, [edi]              ; load first character of substring into low byte of r8
+        mov r9b, [esi]              ; load first character of string into low byte of r9b
+        cmp r8b, r9b                ; compare the characters
+        jne .next_sub               ; if chars aren't equal go to the next iteration
 
-                ; find index of element from matrix A
-                mov rax, r12
-                mul rcx
-                add rax, r14
-                shl rax, 2  ; multiply by 4 (size of float)
-                movss xmm1, [rsi + rax]    ; mov element from matrix A
+        inc r10                     ; increment chars count
+        ; now compare all subsequent characters to find substring
+        mov ebx, edi                ; copy pointer to the substring
+        inc ebx                     ; next char
+        mov edx, esi                ; copy pointer to the string
+        inc edx                     ; next char
+        mov r11, substr_len         ; counter for the compare_loop (substring length - 1)
+        sub r11, 1
+        .compare_loop:
+            mov r8b, [ebx]              ; load character of string1 into low byte of r8
+            mov r9b, [edx]              ; load character of string2 into low byte of r9b
 
-                ; find index of element from matrix B
-                mov rax, r14
-                mul rcx
-                add rax, r13
-                shl rax, 2  ; multiply by 4 (size of float)
-                movss xmm2, [rdi + rax]    ; add element from matrix B
-                vfmadd231ss xmm0, xmm1, xmm2
-                inc r14
-                jmp .element_loop
+            cmp r8b, r9b                ; check if there was a match
+            jne .next_sub               ; if no match - next iteration
 
-                .done_element_loop:
-                    ; find index of element for result matrix
-                    mov rax, r12
-                    mul rcx
-                    add rax, r13
-                    shl rax, 2  ; multiply by 4 (size of float)
-                    movss [rbx + rax], xmm0
-                    inc r13
-                    jmp .col_loop
+            inc r10                     ; if match, increment chars count
 
-            .done_col_loop:
-                inc r12
-                jmp .row_loop
+            ; check if we have already found substring
+            cmp r10, substr_len
+            jne .next_char
 
-    .done:
-        call timer_end              ; get the end time
+            ; increment substring count
+            inc eax
+            jmp .next_sub
 
-        mov ax, PRINT_MAT
-        test ax, ax
-        jz .exit
-        ; print result matrix
-        mov rsi, msg_res
-        mov rdx, msg_res_len
-        call print_string
+            .next_char:
+                dec r11
+                test r11, r11
+                jz .next_sub
+                inc ebx
+                inc edx
+                jmp .compare_loop
 
-        mov rbx, [mat_res_ptr]
-        call print_mat
+
+        .next_sub:
+            xor r10, r10
+            add esi, 1                ; move pointer to next position in large string
+            dec ecx                   ; decrease remaining length
+            cmp ecx, substr_len       ; stop if there’s no room for substring
+            jge .substring_search     ; repeat loop 
+
+    ; result is now stored in rax
+    call timer_end
+
+    ; print result
+    mov rsi, msg_loop_res
+    mov rdx, msg_loop_res_len
+    call print_string
+
+    mov rsi, rax                ; move the integer to be printed into rsi
+    mov rdi, fmt_count          ; format string for integer
+    xor rax, rax                ; printf uses rax to count floating-point args, set it to 0
+    call printf
+
+    call timer_result
+
+    ; check stack pointer alignment
+    cmp r9, rsp         ; check if we adjusted the stack (from earlier alignment check)
+    je .exit            ; jump if rsp was adjusted
+
+    add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
 
     .exit:
-        call timer_result           ; print timer results
-        mov rsp, rbp
-        pop rbp
+
+    pop rcx
+    pop rsi
+    pop rdi
 ret
 
-multiply_simd:
-    push rbp
-    mov rbp, rsp
+count_substring_simd:
+    xor ebx, ebx              ; substring mask
+    call build_mask           ; ebx now containes substring mask
 
-    mov rsi, [matA_ptr]      ; pointer to matrix A
-    mov rdi, [matB_ptr]      ; pointer to matrix B
-    mov rbx, [mat_res_ptr]   ; pointer to result matrix
+    xor eax, eax              ; init counter
+    xor edx, edx              ; compare mask
 
-    xor r12, r12             ; matrix A index
-    xor r13, r13             ; matrix B index
-    xor r14, r14             ; element index
+    movdqu xmm1, [edi]        ; load substring (assuming length <= 16)
+    call timer_start
+    .substring_search:
+        ; find starting char of substring
+        mov r8b, [esi]             ; load first character of substring
+        mov r9b, [edi]             ; load first character of string
+        cmp r8b, r9b               ; compare the characters
+        jne .next                  ; if chars aren't equal go to the next iteration
 
-    ; find remainder
-    mov eax, MAT_DIM
-    mov ecx, SIMD_AVX_WIDTH
-    xor edx, edx            ; clear edx for division
-    div ecx                 ; divide eax by ecx, now edx contains the remainder
+        movdqu xmm0, [esi]        ; load 16 bytes from larger string
 
-    ; Algorithm of multiplication:
-    ; 1. mat_A_loop (outer) - loop through the matrix A by row per iteration
-    ; 2. mat_B_loop (inner) - loop through the matrix A by row per iteration
-    ; 3. row loop (inner for matrix B loop) -> process 8 pack numbers per iteration.
-    ; One iteration of the outer loop -> final row values for result matrix
-    ; Remainder check every iteration for outer loop (if there are remaining elements in matrix B)
-    call timer_start         ; get the start time
-    .mat_A_loop:
-        cmp r12, MAT_DIM
-        jge .done
+        pcmpeqb xmm0, xmm1        ; compare bytes in xmm0 and xmm1
+        pmovmskb edx, xmm0        ; move result to edx as a mask
 
-        xor r13, r13         ; reset index
-        .mat_B_loop:
-            cmp r13, MAT_DIM
-            jge .next_B_row  ; next row of the matrix B
+        and edx, ebx              ; bitwise AND to get only needed bits
+        cmp edx, ebx              ; check if there was a match
+        jne .next                 ; if no match - next iteration
 
-            xor r14, r14
-            vxorps ymm0, ymm0
-            .row_loop:
-                cmp r14, MAT_DIM
-                jge .store_element              ; next 8 float pack
+        inc eax                   ; if match, increment the count
 
-                ; find index of element from matrix A
-                mov rax, MAT_DIM                ; matrix dimension
-                mul r12                         ; multiplied by current row from matrix A
-                add rax, r14                    ; add current row from matrix B
-                shl rax, 2                      ; multiply by 4 (size of float)
-                vbroadcastss ymm1, [rsi + rax]  ; mov 1 elements from matrix A to all values of ymm
+        .next:
+            add esi, 1                ; move pointer to next position in larger string
+            dec ecx                   ; decrease remaining length
+            cmp ecx, substr_len       ; stop if there’s no room for substring
+            jge .substring_search     ; repeat loop
 
-                ; find index of pack of elements from matrix B
-                mov rax, MAT_DIM                ; matrix dimension
-                mul r14                         ; multiplied by current row from matrix A
-                add rax, r13                    ; add current row from matrix B
-                shl rax, 2                      ; multiply by 4 (size of float)
-                vmovups ymm2, [rdi + rax]       ; move 8 element from matrix B
-                vfmadd231ps ymm0, ymm1, ymm2    ; multiply element from A with 8 elements from B and add to accumulator
-                inc r14
-                jmp .row_loop
+    ; result is now stored in rax
+    call timer_end
 
-                .store_element:
-                    ; find index of element for result matrix
-                    mov rax, MAT_DIM
-                    mul r12
-                    add rax, r13
-                    shl rax, 2  ; multiply by 4 (size of float)
-                    vmovups [rbx + rax], ymm0
-                    add r13, 8  ; next 8 block numbers
-                    jmp .mat_B_loop
+    ; print result
+    mov rsi, msg_simd_res
+    mov rdx, msg_simd_res_len
+    call print_string
 
-            .next_B_row:
-                ; check remainder
-                test rdx, rdx
-                jz .next_iteration
+    mov rsi, rax                                ; move the integer to be printed into rsi
+    mov rdi, fmt_count                          ; format string for integer
+    xor rax, rax                                ; printf uses rax to count floating-point args, set it to 0
+    call printf
 
-                ; calculate remainder
-                mov r13, MAT_DIM  ; start index
-                sub r13, rdx
-                .remainder_loop:
-                    cmp r13, MAT_DIM
-                    jge .next_iteration
-                    xor r14, r14
-                    xorps xmm0, xmm0
-                    .inner_loop:
-                        cmp r14, MAT_DIM
-                        jge .done_inner_loop
-                        ; find index of element from matrix A
-                        mov rax, MAT_DIM
-                        mul r12
-                        add rax, r14
-                        shl rax, 2  ; multiply by 4 (size of float)
-                        movss xmm1, [rsi + rax]    ; mov element from matrix A
-
-                        ; find index of element from matrix B
-                        mov rax, MAT_DIM
-                        mul r14
-                        add rax, r13
-                        shl rax, 2  ; multiply by 4 (size of float)
-                        movss xmm2, [rdi + rax]    ; add element from matrix B
-                        vfmadd231ss xmm0, xmm1, xmm2
-                        inc r14
-                        jmp .inner_loop
-
-                        .done_inner_loop:
-                            ; find index of element for result matrix
-                            mov rax, MAT_DIM
-                            mul r12
-                            add rax, r13
-                            shl rax, 2  ; multiply by 4 (size of float)
-                            movss [rbx + rax], xmm0
-                            inc r13
-                            jmp .remainder_loop
-                .next_iteration:
-                    inc r12
-                    jmp .mat_A_loop
-
-    .done:
-        call timer_end              ; get the end time
-
-        mov ax, PRINT_MAT
-        test ax, ax
-        jz .exit
-        ; print result matrix
-        mov rsi, msg_res
-        mov rdx, msg_res_len
-        call print_string
-
-        mov rbx, [mat_res_ptr]
-        call print_mat
-
-    .exit:
-        call timer_result           ; print timer results
-        mov rsp, rbp
-        pop rbp
+    call timer_result
 ret
 
 ; =================== helpers ===================
-check_simd_support:
-    ; check for SSE2 support
-    mov eax, 1                   ; CPUID function 1
-    cpuid
-    test edx, 1 << 26            ; check if SSE2 (bit 26 of edx) is set
-    jz .no_sse2
 
-    ; check for AVX support
-    test ecx, 1 << 28            ; check if AVX (bit 28 of ecx) is set
-    jnz .exit
+init_string_from_file:
+    ; open input file
+    mov rax, SYS_OPEN
+    mov rdi, INPUT_FILE_NAME
+    xor rsi, rsi                        ; read-only
+    xor rdx, rdx                        ; no flags
+    syscall                             ; return: rax contains file desriptor
+    mov rdi, rax                        ; save file descriptor
 
-    ; if no SSE2 support, print error message
-    mov esi, msg_SSE2
-    mov edx, msg_SSE2_len
-    call print_string
-    mov rax, 1              ; error code
-    jmp .exit
+    ; check errors
+    cmp rax, ERROR_FILE_NOT_FOUND
+    je .error_file_not_found
 
-    .no_sse2:
-        ; if no AVX support, print error message
-        mov esi, msg_AVX
-        mov edx, msg_AVX_len
+    ; get input file content
+    mov rax, SYS_READ
+    mov rsi, file_content_buffer
+    mov rdx, STRING_SIZE
+    syscall                             ; return: rax contains number of reading bytes
+    mov [string_length], rax            ; length of the reading bytes
+
+    ; close input file
+    mov rax, SYS_CLOSE
+    mov rdi, rdi                        ; use saved file descriptor
+    syscall
+
+    ret
+
+    .error_file_not_found:
+        mov esi, error_file_msg
+        mov edx, error_file_msg_len
         call print_string
-        mov rax, 1              ; error code
-
-    .exit:
 ret
 
-alloc:
-    mov rsi, ALIGNMENT              ; (2d arg) alignment
-    mov rdx, MAT_SIZE               ; (3d arg) size of the memory block to allocate
-    call posix_memalign             ; call posix_memalign
-ret
-
-init_data:
-    xor rsi, rsi ; index
-    movss xmm0, [START_MAT_VAL]
-    movss xmm1, [INIT_STEP]
-
-    .init:
-        cmp rsi, MAT_LENGTH
-        jge .done_filling                      ; if index >= VECTOR_LENGTH, stop filling
-
-        movss [rdi + rsi * FLOAT_SIZE], xmm0   ; store index as the value in the vector
-
-        addss xmm0, xmm1
-
-        inc rsi                                ; move to the next index
-        jmp .init
-
-    .done_filling:
-ret
-
-print_mat:
-    xor r12, r12    ; row index, non-volatile for printf function call
-    xor r14, r14
-    xor rsi, rsi
-
-    .print_row_loop:
-        cmp r12, MAT_DIM
-        jge .end_loop
-        xor r13, r13    ; column index, non-volatile for printf function call
-        .print_col_loop:
-            ; find index of element
-            mov r14, MAT_DIM
-            imul r14, r12
-            add r14, r13
-
-            movss xmm0, [rbx + r14 * FLOAT_SIZE]    ; move float number to register
-            cvtss2sd xmm0, xmm0                     ; convert to double as printf expects double
-            mov rax, 1                              ; arguments amount (1 float number)
-
-            cmp r13, MAT_DIM - 1                    ; compare index with matrix dimension
-            jge .print_last_in_row                  ; jump if index >= matrix dimension - 1
-
-            mov rdi, fmt_space                      ; format string
-            call printf                             ; call printf to print the value
-
-            inc r13                                 ; increment the column index
-            jmp .print_col_loop                     ; repeat the loop
-
-            .print_last_in_row:
-                mov rdi, fmt_newline                ; format string
-                call printf                         ; call printf to print the value
-                inc r12
-                jmp .print_row_loop                  ; next row
-
-    .end_loop:
+build_mask:
+    mov ebx, 1
+    shl ebx, substr_len     ; bitwise shift left by length of the substring
+    sub ebx, 1              ; flips all lowest 'length' 0 bits to 1
 ret
 
 print_string:
-push rbx
-    mov rax, SYS_WRITE
-    mov rdi, STDOUT
-    syscall
-    pop rbx
-ret
+    push rax
 
-print_newline:
-    mov rsi, newline_ascii      ; address of newline character
-    mov rdx, 1                  ; length
-    mov rdi, STDOUT
     mov rax, SYS_WRITE
+    mov rdi, STDOUT
     syscall
+
+    pop rax
 ret
 
 timer_start:
     push rdx
+    push rax
 
     rdtsc                       ; read time-stamp counter into EDX:EAX
     shl rdx, 32                 ; shift RDX left by 32 bits
     or rax, rdx                 ; combine into a 64-bit value (RAX)
     mov [start_time], rax       ; store start time
 
+    pop rax
     pop rdx
 ret
 
 timer_end:
+    push rdx
+    push rax
+
     rdtsc                       ; read time-stamp counter into EDX:EAX
     shl rdx, 32                 ; shift RDX left by 32 bits
     or rax, rdx                 ; combine into a 64-bit value (RAX)
     mov [end_time], rax         ; store end time
+
+    pop rax
+    pop rdx
 ret
 
 timer_result:
+    ; align the stack (needed for calling printf)
+    mov r9, rsp         ; copy rsp to r9 for alignment calculation
+    test r9, 15          ; check if rsp is already 16-byte aligned
+    jz .aligned         ; if aligned, skip the next instruction
+
+    sub rsp, 8          ; adjust stack pointer if not aligned (subtract 8 to align)
+
+    .aligned:
     ; calculate elapsed CPU cycles
     mov rax, [end_time]         ; load end time
     sub rax, [start_time]       ; subtract start time to get elapsed cycles
@@ -515,4 +317,12 @@ timer_result:
     mov rdi, fmt_timer                          ; format string for integer
     xor rax, rax                                ; printf uses rax to count floating-point args, set it to 0
     call printf                                 ; call printf to print the integer
+
+    ; check stack pointer alignment
+    cmp r9, rsp         ; check if we adjusted the stack (from earlier alignment check)
+    je .exit            ; jump if rsp was adjusted
+
+    add rsp, 8          ; restore the stack pointer (undo the alignment adjustment)
+
+    .exit:
 ret
