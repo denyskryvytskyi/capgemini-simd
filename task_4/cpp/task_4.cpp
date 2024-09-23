@@ -29,7 +29,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-void allocMat(float*& pMat);
+bool allocMat(float*& pMat);
 void initData(float* pMatA, float* pMatB, float* pMatRes);
 void resetRes(float* pMatRes);
 void printMat(float* pMat);
@@ -45,9 +45,18 @@ int main()
     float* pMatB = nullptr;
     float* pMatRes = nullptr;
 
-    allocMat(pMatA);
-    allocMat(pMatB);
-    allocMat(pMatRes);
+    if (!allocMat(pMatA)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocMat(pMatB)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocMat(pMatRes)) {
+        // failed to allocate
+        return 1;
+    }
 
     initData(pMatA, pMatB, pMatRes);
 
@@ -119,11 +128,14 @@ bool checkSIMDSupport()
     return true;
 }
 
-void allocMat(float*& pMat)
+bool allocMat(float*& pMat)
 {
     if (posix_memalign(reinterpret_cast<void**>(&pMat), ALIGNMENT, MAT_SIZE * sizeof(float)) != 0) {
         std::cerr << "Failed to allocate aligned memory." << std::endl;
+        return 1;
     }
+
+    return 0;
 }
 
 void initData(float* pMatA, float* pMatB, float* pMatRes)

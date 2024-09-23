@@ -44,7 +44,7 @@ int main()
     char* pStr = nullptr;
     if (allocStr(pStr)) {
         // failed to allocate
-        return 0;
+        return 1;
     }
     initStr(pStr);
 

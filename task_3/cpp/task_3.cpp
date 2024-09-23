@@ -37,7 +37,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-void allocVec(float*& pVec);
+bool allocVec(float*& pVec);
 void initData(float* pVecA, float* pVecB);
 void printVec(float* pVec);
 
@@ -55,9 +55,18 @@ int main()
     float* pVecB = nullptr;
     float* pVecRes = nullptr;
 
-    allocVec(pVecA);
-    allocVec(pVecB);
-    allocVec(pVecRes);
+    if (allocVec(pVecA)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocVec(pVecB)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocVec(pVecRes)) {
+        // failed to allocate
+        return 1;
+    }
 
     initData(pVecA, pVecB);
 
@@ -133,11 +142,15 @@ bool checkSIMDSupport()
 }
 
 
-void allocVec(float*& pVec)
+bool allocVec(float*& pVec)
 {
     if (posix_memalign(reinterpret_cast<void**>(&pVec), ALIGNMENT, VEC_SIZE * sizeof(float)) != 0) {
         std::cerr << "Failed to allocate aligned memory." << std::endl;
+
+        return 1;
     }
+
+    return 0;
 }
 
 void initData(float* pVecA, float* pVecB)
@@ -242,6 +255,9 @@ void dotProduct(float* pVecA, float* pVecB)
     const auto endTimePoint = std::chrono::high_resolution_clock::now();
 
     std::cout << "Dot product: " <<  result << std::endl;
+
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTimePoint - startTimePoint);
+    std::cout << "Execution time: " << duration.count() << " ms.\n";
 }
 
 void dotProductSIMD(float* pVecA, float* pVecB)

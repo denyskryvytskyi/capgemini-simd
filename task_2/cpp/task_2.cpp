@@ -8,8 +8,6 @@
  *  - With optimization flags -O3 -mavx2:
  *      - Loop-based execution time: 100-300 ms
  *      - SIMD-based execution time: ~70 ms (overall faster)
- * TODO:
- *  - remainder calculation: use SSE2 for less then 8 but more then 4 remainded numbers
  **/ 
 
 #include <immintrin.h>  // AVX
@@ -30,7 +28,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-void allocArray(int32_t*& pArr);
+bool allocArray(int32_t*& pArr);
 void initData(int32_t* pArrA, int32_t* pArrB);
 void printArray(int* arr);
 
@@ -45,9 +43,18 @@ int main()
     int32_t* pArrB = nullptr;
     int32_t* pRes = nullptr;
 
-    allocArray(pArrA);
-    allocArray(pArrB);
-    allocArray(pRes);
+    if (allocArray(pArrA)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocArray(pArrB)) {
+        // failed to allocate
+        return 1;
+    }
+    if (allocArray(pRes)) {
+        // failed to allocate
+        return 1;
+    }
 
     initData(pArrA, pArrB);
 
@@ -116,11 +123,15 @@ bool checkSIMDSupport()
     return true;
 }
 
-void allocArray(int32_t*& pArr)
+bool allocArray(int32_t*& pArr)
 {
     if (posix_memalign(reinterpret_cast<void**>(&pArr), ALIGNMENT, ARRAY_SIZE * sizeof(int32_t)) != 0) {
         std::cerr << "Failed to allocate aligned memory." << std::endl;
+
+        return 1;
     }
+
+    return 0;
 }
 
 void initData(int32_t* pArrA, int32_t* pArrB)
