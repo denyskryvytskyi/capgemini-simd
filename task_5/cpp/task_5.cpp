@@ -23,8 +23,9 @@ constexpr bool PRINT_STR = false;
 constexpr int32_t ALIGNMENT = 16;
 constexpr int32_t MAX_SUB_LENGTH = 16;  // max length of substring that is supported for now
 constexpr int32_t STR_LENGTH = 1'000'000;
-const char* const PATTERN = "pattern"; 
-constexpr int32_t PATTERN_INTERAL = 100; // interval of pattern appearance in generated string
+constexpr int32_t PATTERN_INTERAL = 100; // interval of substring appearance in generated string
+constexpr const char* const SUBSTRING = "pattern";
+constexpr int SUB_LENGTH = sizeof(SUBSTRING) - 1;
 
 bool isSupportedSSE2();
 bool isSupportedAVX();
@@ -34,13 +35,12 @@ bool checkSIMDSupport();
 bool allocStr(char*& pStr);
 void initStr(char*& pStr);
 unsigned int buildMask(int length);
-int countSubstringLoop(const char* str, int strLen, const char* sub, int subLen);
-int countSubstringSIMD(const char* str, int strLen, const char* sub, int subLen);
+int countSubstringLoop(const char* str, int strLen);
+int countSubstringSIMD(const char* str, int strLen);
 
 int main()
 {
     // data definition
-    const std::string substring = "pattern";
     char* pStr = nullptr;
     if (allocStr(pStr)) {
         // failed to allocate
@@ -54,13 +54,13 @@ int main()
 
     // Loop-based counting
     auto startTime = std::chrono::high_resolution_clock::now();
-    int loopCount = countSubstringLoop(pStr, STR_LENGTH, substring.c_str(), substring.length());
+    int loopCount = countSubstringLoop(pStr, STR_LENGTH);
     auto endTime = std::chrono::high_resolution_clock::now();
     const float loopDuration = std::chrono::duration<float, std::milli>(endTime - startTime).count();
 
     // SIMD-based counting
     startTime = std::chrono::high_resolution_clock::now();
-    int simdCount = countSubstringSIMD(pStr, STR_LENGTH, substring.c_str(), substring.length());
+    int simdCount = countSubstringSIMD(pStr, STR_LENGTH);
     endTime = std::chrono::high_resolution_clock::now();
     const float simdDuration = std::chrono::duration<float, std::milli>(endTime - startTime).count();
 
@@ -135,15 +135,15 @@ void initStr(char*& pStr) {
     std::srand(static_cast<unsigned int>(std::time(0))); // seed random number generator
 
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const size_t patternLen = strlen(PATTERN);
+    const size_t patternLen = strlen(SUBSTRING);
     const size_t charsetLen = strlen(charset);
     int patternCount = 0;
 
     for (size_t i = 0; i < STR_LENGTH; ++i) {
         if (patternCount == PATTERN_INTERAL) {
             // insert the pattern at regular interval
-            strcat(pStr, PATTERN);
-            i += patternLen;
+            strcat(pStr, SUBSTRING);
+            i += SUB_LENGTH;
             patternCount = 0; // reset the counter
         } else {
             // generate a random character from the charset
@@ -158,32 +158,32 @@ unsigned int buildMask(int length) {
     return (1U << length) - 1; // creates a mask of 'length' bits set to 1
 }
 
-int countSubstringSIMD(const char* str, int strLen, const char* sub, int subLen) {
+int countSubstringSIMD(const char* str, int strLen) {
     int count = 0;
-    if (subLen > strLen){
+    if (SUB_LENGTH > strLen){
         std::cout << "Error: substring is longer then string\n";
         return 0;
     }
-    if (subLen > MAX_SUB_LENGTH) {
+    if (SUB_LENGTH > MAX_SUB_LENGTH) {
         std::cout << "Error: substring is longer then 16 characters. It isn't supported for now\n";
         return 0;
     }
 
-    unsigned int maskSub = buildMask(subLen); // build bit mask based on substring length
+    unsigned int maskSub = buildMask(SUB_LENGTH); // build bit mask based on substring length
 
     __m128i pattern;
-    if (subLen < MAX_SUB_LENGTH) {
+    if (SUB_LENGTH < MAX_SUB_LENGTH) {
         // if length of the substring less then 16, we need to fill other bytes with 0 values
         char temp[16] = {0}; // initialize a temporary array with 16 bytes
-        memcpy(temp, sub, subLen); // copy the substring into the temporary array
+        memcpy(temp, SUBSTRING, SUB_LENGTH); // copy the substring into the temporary array
         pattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(temp));
     }
     else {
-        pattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(sub));
+        pattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(SUBSTRING));
     }
 
-    for (int i = 0; i <= strLen - subLen; ++i) {
-        if (str[i] == sub[0]) { // check character if it the same as the first character of the substring
+    for (int i = 0; i <= strLen - SUB_LENGTH; ++i) {
+        if (str[i] == SUBSTRING[0]) { // check character if it the same as the first character of the substring
             // compare substring and 16 characters of string
             __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(str + i));
             __m128i cmp = _mm_cmpeq_epi8(chunk, pattern);
@@ -191,7 +191,7 @@ int countSubstringSIMD(const char* str, int strLen, const char* sub, int subLen)
 
             if (mask == maskSub) { // check whether all needed bits match
                 ++count;
-                i += subLen - 1; // skip found substring
+                i += SUB_LENGTH - 1; // skip found substring
             }
         }
     }
@@ -199,10 +199,10 @@ int countSubstringSIMD(const char* str, int strLen, const char* sub, int subLen)
     return count;
 }
 
-int countSubstringLoop(const char* str, int strLen, const char* sub, int subLen) {
+int countSubstringLoop(const char* str, int strLen) {
     int count = 0;
-    for (int i = 0; i <= strLen - subLen; ++i) {
-        if (strncmp(str + i, sub, subLen) == 0) {
+    for (int i = 0; i <= strLen - SUB_LENGTH; ++i) {
+        if (strncmp(str + i, SUBSTRING, SUB_LENGTH) == 0) {
             count++;
         }
     }
