@@ -12,12 +12,10 @@
 #include <immintrin.h>  // AVX
 #include <cpuid.h>      // __get_cpuid
 #include <iostream>
-#include <string>
-#include <chrono>
 #include <random>
+#include <string>
 #include <cstring>
-
-#include <bitset>
+#include <chrono>
 
 constexpr bool PRINT_STR = false;
 constexpr int32_t ALIGNMENT = 16;
@@ -54,13 +52,13 @@ int main()
 
     // Loop-based counting
     auto startTime = std::chrono::high_resolution_clock::now();
-    int loopCount = countSubstringLoop(pStr, STR_LENGTH);
+    const int loopCount = countSubstringLoop(pStr, STR_LENGTH);
     auto endTime = std::chrono::high_resolution_clock::now();
     const float loopDuration = std::chrono::duration<float, std::milli>(endTime - startTime).count();
 
     // SIMD-based counting
     startTime = std::chrono::high_resolution_clock::now();
-    int simdCount = countSubstringSIMD(pStr, STR_LENGTH);
+    const int simdCount = countSubstringSIMD(pStr, STR_LENGTH);
     endTime = std::chrono::high_resolution_clock::now();
     const float simdDuration = std::chrono::duration<float, std::milli>(endTime - startTime).count();
 
@@ -131,7 +129,8 @@ bool allocStr(char*& pStr)
     return 0;
 }
 
-void initStr(char*& pStr) {
+void initStr(char*& pStr)
+{
     std::srand(static_cast<unsigned int>(std::time(0))); // seed random number generator
 
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -154,13 +153,27 @@ void initStr(char*& pStr) {
     }
 }
 
-unsigned int buildMask(int length) {
+unsigned int buildMask(int length)
+{
     return (1U << length) - 1; // creates a mask of 'length' bits set to 1
 }
 
-int countSubstringSIMD(const char* str, int strLen) {
+int countSubstringLoop(const char* str, int strLen)
+{
     int count = 0;
-    if (SUB_LENGTH > strLen){
+    for (int i = 0; i <= strLen - SUB_LENGTH; ++i) {
+        if (strncmp(str + i, SUBSTRING, SUB_LENGTH) == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+
+int countSubstringSIMD(const char* str, int strLen)
+{
+    int count = 0;
+    if (SUB_LENGTH > strLen) {
         std::cout << "Error: substring is longer then string\n";
         return 0;
     }
@@ -177,8 +190,7 @@ int countSubstringSIMD(const char* str, int strLen) {
         char temp[16] = {0}; // initialize a temporary array with 16 bytes
         memcpy(temp, SUBSTRING, SUB_LENGTH); // copy the substring into the temporary array
         pattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(temp));
-    }
-    else {
+    } else {
         pattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(SUBSTRING));
     }
 
@@ -196,15 +208,5 @@ int countSubstringSIMD(const char* str, int strLen) {
         }
     }
 
-    return count;
-}
-
-int countSubstringLoop(const char* str, int strLen) {
-    int count = 0;
-    for (int i = 0; i <= strLen - SUB_LENGTH; ++i) {
-        if (strncmp(str + i, SUBSTRING, SUB_LENGTH) == 0) {
-            count++;
-        }
-    }
     return count;
 }
