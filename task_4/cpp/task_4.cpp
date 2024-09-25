@@ -1,13 +1,13 @@
 /**
  * TASK: Matrix Multiplication Using SIMD
- * NOTE: As matrix dimension may not be multiple of 8, loadu and storeu intrinsics are used for this edge case. Even if we allocate aligned dynamic memory, iterating by rows/columns may cause unaligned memory loading to simd registers. Possible solution in TODO.
- * RESULTS: (for square matrix with dimension = 1000) 
+ * NOTE: As matrix dimension may not be multiple of 8, loadu and storeu intrinsics are used for this edge case Iterating by rows/columns may cause unaligned memory loading to simd registers even if we allocate aligned dynamic memory. Possible solution in TODO.
+ * RESULTS: (for a square matrix with dimension = 1000) 
  *      - With optimization flags -O3 -mavx2 -mfma:
  *          - Loop-based execution time: ~1300 ms
  *          - SIMD-based execution time: ~200 ms
  * TODO:
- *  - check if we doesn't have remainder (dimension is multiple of 8), then use simd intrinsics for aligned
- *  - support of the rectangular matrix with different rows and columns size
+ *  - check if we don't have remainder (dimension is multiple of 8), then use simd intrinsics for aligned
+ *  - support of the rectangular matrix with different rows and column size
  **/ 
 
 #include <immintrin.h>  // AVX

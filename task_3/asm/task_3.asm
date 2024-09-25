@@ -7,7 +7,7 @@
 ;       - Loop-based execution time: ~20 ms
 ;       - SIMD-based execution time: ~3-5 ms
 ; TODO:
-;   - SSE for remainder if remainder size >= 4
+;   - SSE for the remainder if remainder size >= 4
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60

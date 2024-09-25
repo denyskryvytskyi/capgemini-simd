@@ -1,12 +1,12 @@
 /**
  * TASK: String Processing Using SIMD
- * NOTE: Implementation support any substring length less then 16
- * RESULTS: (for string with length = 1'000'000)
+ * NOTE: Implementation support any substring length less than 16
+ * RESULTS: (for the string with length = 1'000'000)
  *      - With optimization flags -O3 -msse2 -mfma:
  *          - Loop-based execution time: ~3-3.5 ms
  *          - SIMD-based execution time: ~0.7 ms
  * TODO:
- *  - add support for the substring length greater then 16
+ *  - add support for the substring length greater than 16
  **/ 
 
 #include <immintrin.h>  // AVX

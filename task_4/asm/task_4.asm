@@ -1,14 +1,14 @@
 ; TASK: Matrix Multiplication Using SIMD
-; NOTE: we align dynamically alloted matrices, but due to the multiplication algorithm there is an edge case if we have matrix dimension that is not multiple of 8. Then we have situation when we try to load unaligned memory to simd registers. So to handle this I have used instructions for unaligned memory location for now. Possible solutions also mentioned in TODO.
+; NOTE: we align dynamically allocated matrices, but due to the multiplication algorithm, there is an edge case if we have a matrix dimension that is not multiple of 8. Then we have a situation when we try to load unaligned memory to SIMD registers. So to handle this I have used instructions for unaligned memory location. Possible solutions are mentioned in TODO.
 ; RESULTS (for matrices with dimension 1000):
 ;       - Loop-based execution time: ~1550-1660 ms
 ;       - SIMD-based execution time: ~300-350 ms
 ; TODO (possible improvements):
-;   - reactangle matrix processing (with different row and column dimensions)
-;   - usage of simd instructions for aligned memory when matrix dimension is multiple of 8:
-;       - add conditional logic depending on dimension directly in current algorithm
-;       - make seperate implementation of the algorithm in other procedure
-;       - other algorithm for multiplication approach (e.g. transpose second matrix)
+;   - rectangular matrix processing (with different row and column dimensions)
+;   - usage of SIMD instructions for aligned memory when matrix dimension is multiple of 8:
+;       - add conditional logic depending on dimension directly in the current algorithm
+;       - make separate implementation of the algorithm in other procedure
+;       - other algorithms for multiplication approach (e.g. transpose second matrix)
 
 SYS_WRITE equ 1
 SYS_EXIT equ 60

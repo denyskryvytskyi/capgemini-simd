@@ -4,12 +4,12 @@
 ;    - Implementation support search only for substring with length <= 16.
 ; RESULTS (with the string length equals 50'000'000):
 ;       - Loop-based execution time: ~60-50 ms
-;       - SIMD-based execution time: ~50-55 ms (approximately 10 ms less then loop-based)
-; CONCLUSION: According to the performance results improvement isn't too big. So, there is a bottleneck in simd substring search implementation because we compare first character of the string with first character of substring  on every iteration of the main loop and only then (when first characters are the same) use simd for substring check.
+;       - SIMD-based execution time: ~50-55 ms (approximately 10 ms less than loop-based)
+; CONCLUSION: According to the performance results improvement isn't too big. So, there is a bottleneck in simd substring search implementation because we compare the first character of the string with the first character of the substring on every iteration of the main loop, and only then (when the first characters are the same) use simd for substring check.
 ; TODO (improvements/optimizations):
 ;   - loop unrolling: split the big string of the smaller parts and search in all of them in one iteration of the main loop iteration.
-;   - reduce amount of branching in simd implementation
-;   - AVS register usage (if substring is less then 16, then we can check in 32 bytes of string at once)
+;   - reduce the amount of branching in simd implementation
+;   - AVS register usage (if the substring is less than 16, then we can check in 32 bytes of string at once)
 
 SYS_READ equ 0
 SYS_WRITE equ 1
