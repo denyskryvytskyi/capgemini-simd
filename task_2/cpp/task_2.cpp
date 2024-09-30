@@ -28,7 +28,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-bool allocArray(int32_t*& pArr);
+int32_t* allocArray();
 void initData(int32_t* pArrA, int32_t* pArrB);
 void printArray(int* arr);
 
@@ -39,20 +39,24 @@ int main()
 {
     const bool isSIMDSupport = checkSIMDSupport();
 
-    int32_t* pArrA = nullptr;
-    int32_t* pArrB = nullptr;
-    int32_t* pRes = nullptr;
+    int32_t* pArrA = allocArray();
+    if (!pArrA) {
+        std::cerr << "Failed to allocate memory for array A." << std::endl;
+        return 1;
+    }
 
-    if (allocArray(pArrA)) {
-        // failed to allocate
+    int32_t* pArrB = allocArray();
+    if (!pArrB) {
+        free(pArrA);
+        std::cerr << "Failed to allocate memory for array B." << std::endl;
         return 1;
     }
-    if (allocArray(pArrB)) {
-        // failed to allocate
-        return 1;
-    }
-    if (allocArray(pRes)) {
-        // failed to allocate
+
+    int32_t* pRes = allocArray();
+    if (!pRes) {
+        free(pArrA);
+        free(pArrB);
+        std::cerr << "Failed to allocate memory for result array." << std::endl;
         return 1;
     }
 
@@ -123,15 +127,14 @@ bool checkSIMDSupport()
     return true;
 }
 
-bool allocArray(int32_t*& pArr)
+int32_t* allocArray()
 {
-    if (posix_memalign(reinterpret_cast<void**>(&pArr), ALIGNMENT, ARRAY_SIZE * sizeof(int32_t)) != 0) {
-        std::cerr << "Failed to allocate aligned memory." << std::endl;
-
-        return 1;
+    int32_t* ptr = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&ptr), ALIGNMENT, ARRAY_SIZE * sizeof(int32_t)) != 0) {
+        return nullptr;
     }
 
-    return 0;
+    return ptr;
 }
 
 void initData(int32_t* pArrA, int32_t* pArrB)

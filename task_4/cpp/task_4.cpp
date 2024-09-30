@@ -29,7 +29,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-bool allocMat(float*& pMat);
+float* allocMat();
 void initData(float* pMatA, float* pMatB, float* pMatRes);
 void resetRes(float* pMatRes);
 void printMat(float* pMat);
@@ -41,20 +41,24 @@ int main()
 {
     const bool isSIMDSupport = checkSIMDSupport();
 
-    float* pMatA = nullptr;
-    float* pMatB = nullptr;
-    float* pMatRes = nullptr;
+    float* pMatA = allocMat();
+    if (!pMatA) {
+        std::cerr << "Failed to allocate memory for matrix A." << std::endl;
+        return 1;
+    }
 
-    if (!allocMat(pMatA)) {
-        // failed to allocate
+    float* pMatB = allocMat();
+    if (!pMatB) {
+        free(pMatA);
+        std::cerr << "Failed to allocate memory for matrix B." << std::endl;
         return 1;
     }
-    if (allocMat(pMatB)) {
-        // failed to allocate
-        return 1;
-    }
-    if (allocMat(pMatRes)) {
-        // failed to allocate
+
+    float* pMatRes = allocMat();
+    if (!pMatRes) {
+        free(pMatA);
+        free(pMatB);
+        std::cerr << "Failed to allocate memory for result matrix." << std::endl;
         return 1;
     }
 
@@ -128,14 +132,14 @@ bool checkSIMDSupport()
     return true;
 }
 
-bool allocMat(float*& pMat)
+float* allocMat()
 {
-    if (posix_memalign(reinterpret_cast<void**>(&pMat), ALIGNMENT, MAT_SIZE * sizeof(float)) != 0) {
-        std::cerr << "Failed to allocate aligned memory." << std::endl;
-        return 1;
+    float* ptr = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&ptr), ALIGNMENT, MAT_SIZE * sizeof(float)) != 0) {
+        return nullptr;
     }
 
-    return 0;
+    return ptr;
 }
 
 void initData(float* pMatA, float* pMatB, float* pMatRes)

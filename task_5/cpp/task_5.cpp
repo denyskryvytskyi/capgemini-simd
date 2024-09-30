@@ -123,10 +123,10 @@ bool allocStr(char*& pStr)
 {
     if (posix_memalign(reinterpret_cast<void**>(&pStr), ALIGNMENT, STR_LENGTH * sizeof(char)) != 0) {
         std::cerr << "Failed to allocate aligned memory." << std::endl;
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 void initStr(char*& pStr)

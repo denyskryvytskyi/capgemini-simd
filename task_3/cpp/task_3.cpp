@@ -37,7 +37,7 @@ bool isSupportedAVX();
 bool isSupportedAVX512();
 bool checkSIMDSupport();
 
-bool allocVec(float*& pVec);
+float* allocVec();
 void initData(float* pVecA, float* pVecB);
 void printVec(float* pVec);
 
@@ -51,20 +51,24 @@ int main()
 {
     const bool isSIMDSupport = checkSIMDSupport();
 
-    float* pVecA = nullptr;
-    float* pVecB = nullptr;
-    float* pVecRes = nullptr;
+    float* pVecA = allocVec();
+    if (!pVecA) {
+        std::cerr << "Failed to allocate memory for vector A." << std::endl;
+        return 1;
+    }
 
-    if (allocVec(pVecA)) {
-        // failed to allocate
+    float* pVecB = allocVec();
+    if (!pVecB) {
+        free(pVecA);
+        std::cerr << "Failed to allocate memory for vector B." << std::endl;
         return 1;
     }
-    if (allocVec(pVecB)) {
-        // failed to allocate
-        return 1;
-    }
-    if (allocVec(pVecRes)) {
-        // failed to allocate
+
+    float* pVecRes = allocVec();
+    if (!pVecRes) {
+        free(pVecA);
+        free(pVecB);
+        std::cerr << "Failed to allocate memory for result vector." << std::endl;
         return 1;
     }
 
@@ -142,15 +146,14 @@ bool checkSIMDSupport()
 }
 
 
-bool allocVec(float*& pVec)
+float* allocVec()
 {
-    if (posix_memalign(reinterpret_cast<void**>(&pVec), ALIGNMENT, VEC_SIZE * sizeof(float)) != 0) {
-        std::cerr << "Failed to allocate aligned memory." << std::endl;
-
-        return 1;
+    float* ptr = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&ptr), ALIGNMENT, VEC_SIZE * sizeof(float)) != 0) {
+        return nullptr;
     }
 
-    return 0;
+    return ptr;
 }
 
 void initData(float* pVecA, float* pVecB)
