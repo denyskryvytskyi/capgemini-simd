@@ -138,16 +138,7 @@ main:
         mov rdx, msg_simd_res_len
         call print_string   ; print header
         call multiply_simd
-
-    ; free memory
-    mov rdi, [matA_ptr]
-    call free
-    mov rdi, [matB_ptr]
-    call free
-    mov rdi, [mat_res_ptr]
-    call free
-
-    jmp .exit
+        jmp .exit
 
     .alloc_failed:
         mov rsi, alloc_failed
@@ -155,6 +146,15 @@ main:
         call print_string
 
     .exit:
+        ; free memory
+        mov rdi, [matA_ptr]
+        call free
+        mov rdi, [matB_ptr]
+        call free
+        mov rdi, [mat_res_ptr]
+        call free
+
+        ; exit
         mov eax, SYS_EXIT                   ; sys_exit system call
         xor edi, edi                        ; exit status 0
         syscall

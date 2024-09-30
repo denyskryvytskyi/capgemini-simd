@@ -113,16 +113,7 @@ main:
     .calculation:
         call add_loop
         call add_simd
-
-    ; free memory
-    mov rdi, [arrA_ptr]
-    call free
-    mov rdi, [arrB_ptr]
-    call free
-    mov rdi, [result_arr_ptr]
-    call free
-
-    jmp .exit
+        jmp .exit
 
     .alloc_failed:
         mov rsi, alloc_failed
@@ -131,6 +122,15 @@ main:
         call print_newline
 
     .exit:
+        ; free memory
+        mov rdi, [arrA_ptr]
+        call free
+        mov rdi, [arrB_ptr]
+        call free
+        mov rdi, [result_arr_ptr]
+        call free
+
+        ; exit
         mov eax, SYS_EXIT                   ; sys_exit system call
         xor edi, edi                        ; exit status 0
         syscall
