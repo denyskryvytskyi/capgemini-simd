@@ -1,7 +1,7 @@
 # Capgemini SIMD tasks
 Assembly tasks are implemented for the Linux environment (WSL) and NASM assembler.
 
-C++ tasks are implemented for the Linux environment (WSL) and g++ compiler.
+C++ tasks are implemented for the Linux environment (WSL) and gcc compiler (g++).
 
 ## Getting Started
 ### Work environment preparation
