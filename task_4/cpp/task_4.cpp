@@ -14,6 +14,7 @@
 #include <cpuid.h>      // __get_cpuid
 #include <iostream>
 #include <chrono>       // timestamp
+#include <cstring>
 
 constexpr int32_t MAT_DIM = 1000; // dimension of the matrix
 constexpr int32_t MAT_SIZE = MAT_DIM * MAT_DIM;
@@ -153,9 +154,7 @@ void initData(float* pMatA, float* pMatB, float* pMatRes)
 
 void resetRes(float* pMatRes)
 {
-   for (int i = 0; i < MAT_SIZE; ++i) {
-        pMatRes[i] = 0.0f;
-    }
+    memset(pMatRes, 0, MAT_SIZE * sizeof(float));
 }
 
 void printMat(float* pMat)
