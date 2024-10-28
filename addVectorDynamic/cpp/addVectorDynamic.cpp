@@ -1,5 +1,5 @@
 /**
- * TASK: Data Alignment and Memory Access
+ * TASK: Vector addition using SIMD with data Alignment and dynamic memory allocation
  * NOTE: my laptop doesn't support AVX512, so I have used 256-bit registers
  * RESULTS: (for dynamic array with size equals 100'000'000)
  *  - With optimization flag -mavx2 only:

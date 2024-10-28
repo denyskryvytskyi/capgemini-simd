@@ -1,5 +1,5 @@
 /**
- * TASK: Basic SIMD Operations
+ * TASK: Vector addition using SIMD
  * RESULTS: (for static array size equals 100'000)
  *  1. with optimizations flags (-mavx2)):
  *      - Loop-based execution time: ~200-300 ms

@@ -1,5 +1,5 @@
 /**
- * TASK: String Processing Using SIMD
+ * TASK: String Processing Using SIMD - substring search
  * NOTE: Implementation support any substring length less than 16
  * RESULTS: (for the string with length = 1'000'000)
  *      - With optimization flags -O3 -msse2 -mfma:
